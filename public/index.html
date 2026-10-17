@@ -107,6 +107,13 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-o
 .rules b{font-family:var(--display);font-weight:400;color:var(--gold);font-variant-numeric:tabular-nums}
 .small{font-size:13px;color:var(--mute)}
 input{user-select:text;-webkit-user-select:text}
+#leave[hidden]{display:none}
+#toasts{position:fixed;z-index:25;left:max(12px,env(safe-area-inset-left,0px));right:max(12px,env(safe-area-inset-right,0px));
+  top:calc(env(safe-area-inset-top,0px) + 72px);display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none}
+.toast{pointer-events:auto;max-width:520px;width:100%;background:var(--gold);color:#2b2005;border-radius:12px;padding:8px 12px;font-size:15px;line-height:1.25;
+  box-shadow:0 4px 14px rgba(0,0,0,.5);overflow-wrap:anywhere;animation:slidein .25s ease-out}
+.toast b{font-weight:700;margin-right:6px}
+@keyframes slidein{from{transform:translateY(-12px);opacity:0}to{transform:none;opacity:1}}
 #board{justify-content:flex-start}
 .snake{position:relative;margin:auto}
 .snake .pc{position:absolute;filter:drop-shadow(0 1px 1px rgba(0,0,0,.5))}
@@ -134,6 +141,12 @@ input{user-select:text;-webkit-user-select:text}
 .rank td:first-child,.rank th:first-child{width:34px;color:var(--mute)}
 .rank td:nth-child(n+3),.rank th:nth-child(n+3){text-align:right}
 .rank tr.me2 td{color:var(--gold);font-weight:700}
+#rkbox:empty{display:none}
+#rkbox{display:flex;flex-direction:column;gap:6px;background:var(--felt-deep);border-radius:10px;padding:8px 10px}
+.rkhead{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
+.rklink{background:none;border:0;color:var(--gold);font-size:13px;font-weight:700;padding:4px 0;text-decoration:underline}
+#rkbox .me{background:var(--felt);padding:6px 10px}
+#rkbox .rank td,#rkbox .rank th{padding:4px 6px;font-size:14px}
 .err{color:#ff9d85;font-size:14px;min-height:18px;margin:0}
 #chat{position:fixed;inset:0;z-index:30;background:rgba(4,20,14,.94);display:flex;flex-direction:column;
   padding:max(12px,env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) max(12px,env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px))}
@@ -166,6 +179,11 @@ input{user-select:text;-webkit-user-select:text}
   <div id="me"><div class="who" id="who"></div><div id="hand"></div></div>
 </div>
 <div id="layer"></div>
+<div id="toasts" aria-live="polite"></div>
+<div id="leave" class="layer" hidden style="z-index:40">
+  <div class="card"><h2>Sair do jogo?</h2><p id="leavetxt"></p>
+    <div class="btns"><button class="btn" id="lcont">Continuar jogando</button><button class="btn ghost" id="lout">Sair</button></div></div>
+</div>
 <div id="chat" hidden>
   <div class="ch"><h2>Bate-papo</h2><button class="btn ghost" id="chatClose" style="min-height:40px">Fechar</button></div>
   <div id="chatlist"></div>
@@ -251,6 +269,7 @@ function newGame(){
   G={scores:[0,0],hands:[[],[],[],[]],chain:[],turn:0,passed:[[],[],[],[]],passes:0,
      gameId:Date.now().toString(36)+Math.random().toString(36).slice(2,6),handNo:0,res:null,first:true,nextStarter:0,must:null,handOver:false,over:false,viewer:0,msg:'',token:0,cover:false,lastPlayer:0,lastPiece:null};
   for(var i=0;i<4;i++)G.passed[i]=[];
+  armBackGuard();
   newHand();
 }
 function newHand(){
@@ -570,9 +589,11 @@ function showSetup(){
       +'<input id="n'+s+'" value="'+esc(CFG.names[s])+'" maxlength="14" aria-label="Nome">'
       +'<div class="seg" data-s="'+s+'"><button data-h="1" class="'+(CFG.human[s]?'on':'')+'" '+(s===0?'disabled':'')+'>Humano</button><button data-h="0" class="'+(CFG.human[s]?'':'on')+'" '+(s===0?'disabled':'')+'>Robô</button></div></div>';
   }).join('');
-  openLayer('<div class="card"><h2>Dominó do Meladinha</h2><p>Duplas, até 4 jogadores. Vence a dupla que fizer '+TARGET+' pontos primeiro. Com mais de um humano, o celular passa de mão em mão.</p>'+rows
+  openLayer('<div class="card"><h2>Dominó do Meladinha</h2><p>Duplas, até 4 jogadores. Vence a dupla que fizer '+TARGET+' pontos primeiro. Com mais de um humano, o celular passa de mão em mão.</p>'
+    +(viaClaude()?'':'<div id="rkbox"></div>')+rows
     +'<button class="btn" id="go">Começar</button><button class="btn ghost" id="onl">Jogar online (cada um no seu celular)</button><button class="btn ghost" id="rl">Ver pontuação</button></div>');
   $('onl').onclick=openOnline;
+  loadRankBox();
   document.querySelectorAll('.seg').forEach(function(sg){
     sg.addEventListener('click',function(ev){
       var b=ev.target.closest('button');if(!b||b.disabled)return;
@@ -715,6 +736,23 @@ function authError(c){
     nick_em_uso:'Esse apelido já existe. Escolha outro.',login_invalido:'Apelido ou senha incorretos.',muitas_tentativas:'Muitas tentativas. Espere alguns minutos.',
     auth:'Sessão expirada. Entre de novo.'}[c]||'Não foi possível conectar. Tente de novo.';
 }
+/* Ranking resumido na tela inicial: top 5 e, se já tem conta neste aparelho, a sua pontuação. */
+async function loadRankBox(){
+  if(viaClaude()||!/^https?:$/.test(location.protocol)||!$('rkbox'))return;
+  try{
+    netDB();
+    if(!ME&&getToken())await autoLogin();
+    var mine=null,r=await DB.raw({t:'ranking'});
+    if(ME){try{mine=await DB.raw({t:'me'});ME.wins=mine.wins;ME.games=mine.games}catch(e){}}
+    var el=$('rkbox');if(!el)return;
+    var list=(r.list||[]).slice(0,5);
+    var rows=list.map(function(u,i){return '<tr'+(ME&&u.nick===ME.nick?' class="me2"':'')+'><td>'+(i+1)+'</td><td>'+esc(u.nick)+'</td><td>'+u.wins+'</td><td>'+u.games+'</td></tr>'}).join('');
+    el.innerHTML='<div class="rkhead"><span>Ranking</span><button class="rklink" id="rkall">Ver todos</button></div>'
+      +(ME?'<div class="me"><strong>'+esc(ME.nick)+'</strong><span>'+ME.wins+' vitórias · '+ME.games+' jogos</span></div>':'')
+      +(rows?'<table class="rank"><tr><th>#</th><th>Jogador</th><th>Vitórias</th><th>Jogos</th></tr>'+rows+'</table>':'<p class="small">Ninguém pontuou ainda. Jogue online com um amigo para entrar no ranking.</p>');
+    $('rkall').onclick=showRanking;
+  }catch(e){}
+}
 async function showRanking(){
   openLayer('<div class="card"><h2>Ranking</h2><p class="small">Carregando...</p></div>');
   var list=[];
@@ -722,7 +760,7 @@ async function showRanking(){
   var rows=list.map(function(u,i){return '<tr'+(ME&&u.nick===ME.nick?' class="me2"':'')+'><td>'+(i+1)+'</td><td>'+esc(u.nick)+'</td><td>'+u.wins+'</td><td>'+u.games+'</td></tr>'}).join('');
   openLayer('<div class="card"><h2>Ranking</h2>'+(rows?'<table class="rank"><tr><th>#</th><th>Jogador</th><th>Vitórias</th><th>Jogos</th></tr>'+rows+'</table>':'<p>Ninguém pontuou ainda. Só contam partidas online com pelo menos 2 pessoas.</p>')
     +'<button class="btn" id="rb">Voltar</button></div>');
-  $('rb').onclick=showOnline;
+  $('rb').onclick=ME?showOnline:showSetup;
 }
 function logout(){
   setToken('');ME=null;UID=null;MYNAME='';
@@ -739,16 +777,26 @@ function onChat(m){
   else{
     CHAT.push(m.msg);if(CHAT.length>100)CHAT.shift();
     if(chatOpen){var l=$('chatlist'),ph=l.querySelector('p.small');if(ph)ph.remove();l.insertAdjacentHTML('beforeend',chatLine(m.msg));l.scrollTop=l.scrollHeight}
-    else if(!ME||m.msg.n!==ME.nick)unread++;
+    else if(!ME||m.msg.n!==ME.nick){unread++;showToast(m.msg)}
   }
   drawChatBadge();
+}
+/* Mensagem de outro jogador aparece por alguns segundos sem abrir o chat; tocar nela abre o chat. */
+function showToast(msg){
+  var box=$('toasts'),el=document.createElement('div');
+  el.className='toast';
+  el.innerHTML='<b>'+esc(msg.n)+'</b>'+esc(msg.x);
+  el.onclick=function(){el.remove();openChat()};
+  box.appendChild(el);
+  while(box.children.length>3)box.firstChild.remove();
+  setTimeout(function(){if(el.parentNode)el.remove()},6000);
 }
 function drawChatBadge(){
   var b=$('cbadge');b.textContent=unread>9?'9+':unread;b.hidden=!unread;
   var lb=$('ochat');if(lb)lb.textContent='Bate-papo'+(unread?' ('+unread+')':'');
 }
 function openChat(){
-  chatOpen=true;unread=0;drawChatBadge();
+  chatOpen=true;unread=0;drawChatBadge();$('toasts').innerHTML='';
   $('chat').hidden=false;
   var l=$('chatlist');l.innerHTML=CHAT.map(chatLine).join('')||'<p class="small">Nenhuma mensagem ainda.</p>';
   l.scrollTop=l.scrollHeight;
@@ -822,7 +870,32 @@ function subscribe(){
   CHAT=[];unread=0;drawChatBadge();
   UNSUB=ROOMREF.onSnapshot(onRoom,function(e){console.error(e);if(G){G.msg='Conexão com a sala perdida.';render()}else netMsg('Conexão com a sala perdida.')});
 }
-function enterOnline(seat,host){if(!SAVED)SAVED=clone(CFG);ONLINE=true;MYSEAT=seat;IAMHOST=host}
+function enterOnline(seat,host){if(!SAVED)SAVED=clone(CFG);ONLINE=true;MYSEAT=seat;IAMHOST=host;armBackGuard()}
+/* ---------- botão voltar do celular ---------- */
+var guardOn=false;
+function armBackGuard(){
+  if(guardOn)return;
+  try{history.pushState({domino:1},'');guardOn=true}catch(e){}
+}
+window.addEventListener('popstate',function(){
+  guardOn=false;
+  if(!G&&!ROOMREF)return;      // nada a proteger: o navegador volta normalmente
+  armBackGuard();              // fica na página e pergunta
+  if(chatOpen){closeChat();return}
+  askLeave();
+});
+function askLeave(){
+  $('leavetxt').textContent=ONLINE
+    ?(IAMHOST?'Você é o anfitrião. Se sair, a sala é encerrada para todos.':'Você sai da sala e a partida continua sem você.')
+    :'A partida em andamento será perdida.';
+  $('leave').hidden=false;
+}
+$('lcont').onclick=function(){$('leave').hidden=true};
+$('lout').onclick=function(){
+  $('leave').hidden=true;
+  leaveRoom();showSetup();
+  if(guardOn){guardOn=false;try{history.back()}catch(e){}}
+};
 function leaveRoom(){
   if(UNSUB){UNSUB();UNSUB=null}
   if(IAMHOST&&ROOMREF){try{ROOMREF.delete()}catch(e){}}

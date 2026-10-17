@@ -156,8 +156,8 @@ wss.on('connection', (ws, req) => {
 async function handle(ws, m) {
   const reply = (o) => send(ws, { t: 'ack', id: m.id, ...o });
   if (m.t === 'auth' || m.t === 'login' || m.t === 'register') return handleAuth(ws, m, reply);
+  if (m.t === 'ranking') return reply({ list: await store.top(20) }); // público: aparece já na tela inicial
   if (!ws.user) return reply({ error: 'auth' });
-  if (m.t === 'ranking') return reply({ list: await store.top(20) });
   if (m.t === 'me') { const u = await store.byId(ws.user.id); return reply(u ? userOut(u) : { error: 'auth' }); }
 
   const code = String(m.code || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
