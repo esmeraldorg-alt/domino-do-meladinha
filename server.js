@@ -275,9 +275,26 @@ setInterval(() => {
   rooms.forEach((r, c) => { if (!r.subs.size && now - r.touched > 6 * 3600 * 1000) rooms.delete(c); });
 }, 25000);
 
+// ajustes.json: correções de pontos feitas à mão, cada uma aplicada uma única vez (pela chave "id").
+// Formato: [{ "id": "ajuste-1", "nick": "fulano", "wins": 5, "losses": 0 }]
+async function aplicarAjustes() {
+  let lista = [];
+  try { lista = JSON.parse(fs.readFileSync(path.join(__dirname, 'ajustes.json'), 'utf8')); } catch { return; }
+  for (const a of lista) {
+    if (!a || !a.id || !a.nick) continue;
+    const u = await store.byNick(String(a.nick).toLowerCase());
+    if (!u) { console.log('Ajuste ' + a.id + ': usuário ' + a.nick + ' não existe, fica para depois.'); continue; }
+    if (!(await store.once('ajuste:' + a.id))) continue;
+    const wins = Math.max(0, +a.wins || 0), losses = Math.max(0, +a.losses || 0);
+    await store.addStats(u.id, { wins, losses, games: wins + losses }, 'ajuste:' + a.id);
+    console.log('Ajuste ' + a.id + ' aplicado em ' + u.nick + ': +' + wins + ' vitórias, +' + losses + ' derrotas.');
+  }
+}
+
 (async () => {
   if (store.ready) await store.ready;
   SECRET = await store.secret();
+  await aplicarAjustes();
   console.log('Contas guardadas em: ' + store.kind);
   server.listen(PORT, () => console.log('Dominó do Meladinha na porta ' + PORT));
 })().catch((e) => { console.error('Falha ao iniciar:', e); process.exit(1); });

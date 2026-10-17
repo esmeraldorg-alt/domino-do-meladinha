@@ -23,6 +23,12 @@ function fileStore() {
       if (!db.secret) { db.secret = crypto.randomBytes(32).toString('hex'); save(); }
       return db.secret;
     },
+    // Devolve true só na primeira vez que a chave é usada (para ajustes que não podem rodar duas vezes).
+    async once(key) {
+      db.once = db.once || {};
+      if (db.once[key]) return false;
+      db.once[key] = Date.now(); save(); return true;
+    },
     async byNick(lower) { return Object.values(db.users).find((u) => u.nickLower === lower) || null; },
     async byId(id) { return db.users[id] || null; },
     async create(u) {
@@ -70,6 +76,12 @@ function mongoStore(uri) {
         d = await meta.findOne({ _id: 'secret' });
       }
       return d.v;
+    },
+    // Devolve true só na primeira vez que a chave é usada (para ajustes que não podem rodar duas vezes).
+    async once(key) {
+      await ready;
+      try { await meta.insertOne({ _id: 'once:' + key, at: Date.now() }); return true; }
+      catch (e) { if (e.code === 11000) return false; throw e; }
     },
     async byNick(lower) { await ready; return users.findOne({ nickLower: lower }); },
     async byId(id) { await ready; return users.findOne({ id }); },
