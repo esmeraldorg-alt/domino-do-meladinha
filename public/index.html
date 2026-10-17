@@ -194,7 +194,7 @@ input{user-select:text;-webkit-user-select:text}
 (function(){
 'use strict';
 var TARGET=200,TURN_MS=20000,BOT_MS=1800,PASS_MS=1600,TURN=null,ME=null,CHAT=[],unread=0,chatOpen=false;
-var SCORE={fechou:40,chorou:80,buxa:30,buxaDobrada:60,lasquinePreso:60,lasquineSolto:30};
+var SCORE={fechou:40,chorou:80,simples:20,buxa:30,buxaDobrada:60,lasquinePreso:60,lasquineSolto:30};
 var $=function(id){return document.getElementById(id)};
 var CFG={names:['Você','Robô Direita','Parceiro Robô','Robô Esquerda'],human:[true,false,false,false]};
 try{var sv=JSON.parse(localStorage.getItem('domino-cfg')||'null');if(sv&&sv.names&&sv.human){CFG=sv;CFG.human[0]=true}}catch(e){}
@@ -235,12 +235,23 @@ function legalMoves(s){
   });
   return mv;
 }
-function batida(p,L,R){
-  var cl=p.a===L||p.b===L,cr=p.a===R||p.b===R,best={pts:SCORE.buxa,name:'Batida de buxa'};
+/* Pontos da batida. p é a última peça, L e R as pontas antes dela, left quantas peças com esses números ainda estão nas mãos dos outros. */
+function batida(p,L,R,left){
+  var best={pts:SCORE.simples,name:'Batida simples'};
   function up(pts,name){if(pts>best.pts)best={pts:pts,name:name}}
-  if(p.a===p.b)up(SCORE.buxaDobrada,'Batida de buxa dobrada');
-  if(cl&&cr){if(L!==R)up(SCORE.lasquinePreso,'Lasquinê preso');else up(SCORE.lasquineSolto,'Lasquinê solto')}
+  if(p.a===0||p.b===0)up(SCORE.buxa,'Batida de buxa');                 // buxa = o branco
+  if(p.a===0&&p.b===0)up(SCORE.buxaDobrada,'Batida de buxa dobrada');   // o 0|0
+  // Lasquinê: a peça [L,R], de pontas diferentes, serve nas duas pontas.
+  if(L!==R&&((p.a===L&&p.b===R)||(p.a===R&&p.b===L))){
+    if(left>0)up(SCORE.lasquineSolto,'Lasquinê solto');
+    else up(SCORE.lasquinePreso,'Lasquinê preso');
+  }
   return best;
+}
+function restantes(s,L,R){
+  var n=0;
+  for(var o=0;o<4;o++)if(o!==s)G.hands[o].forEach(function(q){if(q.a===L||q.b===L||q.a===R||q.b===R)n++});
+  return n;
 }
 function pipsOf(h){return h.reduce(function(t,p){return t+p.a+p.b},0)}
 function isClosed(){
@@ -260,14 +271,14 @@ function humanCount(){return ONLINE?1:CFG.human.filter(Boolean).length}
 function resText(r){
   var n=nm(r.seat);
   if(r.kind==='batida')return n+' bateu e levou '+r.points+' pontos para '+dupla(r.winner)+'.';
-  if(r.kind==='empate')return 'Os dois lados ficaram com '+r.tp[0]+' pontos nas peças. Ninguém marca.';
+  if(r.kind==='empate')return 'Os dois lados ficaram com '+r.tp[0]+' pontos nas peças. Ninguém marca e a próxima mão sai com a buxa de sena (0|6).';
   return n+' fechou o jogo com '+r.tp[r.ct]+' contra '+r.tp[1-r.ct]+'. Marca '+r.points+' para '+dupla(r.winner)+'.';
 }
 
 /* ---------- partida ---------- */
 function newGame(){
   G={scores:[0,0],hands:[[],[],[],[]],chain:[],turn:0,passed:[[],[],[],[]],passes:0,
-     gameId:Date.now().toString(36)+Math.random().toString(36).slice(2,6),handNo:0,res:null,first:true,nextStarter:0,must:null,handOver:false,over:false,viewer:0,msg:'',token:0,cover:false,lastPlayer:0,lastPiece:null};
+     gameId:Date.now().toString(36)+Math.random().toString(36).slice(2,6),tie:false,handNo:0,res:null,first:true,nextStarter:0,must:null,handOver:false,over:false,viewer:0,msg:'',token:0,cover:false,lastPlayer:0,lastPiece:null};
   for(var i=0;i<4;i++)G.passed[i]=[];
   armBackGuard();
   newHand();
@@ -285,6 +296,12 @@ function newHand(){
     })});
     G.must=best.p;G.turn=seat;
     G.msg=nm(seat)+' começa com a '+best.p.a+'|'+best.p.b+'.';
+  }else if(G.tie){
+    G.tie=false;G.must=null;
+    var holder=-1;
+    G.hands.forEach(function(h,s){h.forEach(function(p){if(p.a===0&&p.b===6){holder=s;G.must=p}})});
+    if(holder>=0){G.turn=holder;G.msg=nm(holder)+' começa com a buxa de sena (0|6).'}
+    else{G.turn=G.nextStarter;G.msg='A buxa de sena dormiu. '+nm(G.turn)+' começa a mão.'}
   }else{
     G.must=null;G.turn=G.nextStarter;G.msg=nm(G.turn)+' começa a mão.';
   }
@@ -370,7 +387,7 @@ function botChoose(s,moves){
     else{nl=e[0];nr=p.a===e[1]?p.b:p.a}
     var rest=hand.filter(function(x){return x!==p});
     if(!rest.length){
-      var info=batida(p,e?e[0]:0,e?e[1]:0);sc+=1000+info.pts;
+      var info=batida(p,e?e[0]:0,e?e[1]:0,1);sc+=1000+info.pts;   // o robô não vê as mãos: supõe que ainda sobram peças
     }else{
       sc+=(p.a+p.b)*0.6+(p.a===p.b?2:0);
       var cnt=function(v){return rest.filter(function(x){return x.a===v||x.b===v}).length};
@@ -396,7 +413,7 @@ function orient(p,side,e){
 }
 function doMove(s,m,auto){
   var e=ends(),p=m.p,np=orient(p,m.side,e);
-  var info=e?batida(p,e[0],e[1]):null;
+  var info=e?batida(p,e[0],e[1],restantes(s,e[0],e[1])):null;
   G.hands[s]=G.hands[s].filter(function(x){return x!==p});
   if(m.side==='L')G.chain.unshift(np);else G.chain.push(np);
   G.must=null;G.first=false;G.passes=0;G.lastPlayer=s;G.lastPiece=np;
@@ -425,7 +442,7 @@ function endHand(r){
     var ct=team(r.seat);res.tp=tp;res.ct=ct;res.seat=r.seat;
     if(tp[0]===tp[1]){
       res.winner=-1;res.points=0;res.title='Fechou empatado';res.kind='empate';
-      G.nextStarter=(G.nextStarter+1)%4;
+      G.tie=true;   // empate: a próxima mão sai com a buxa de sena (0|6)
     }else if(tp[ct]<tp[1-ct]){
       res.winner=ct;res.points=SCORE.fechou;res.title='Fechou e ganhou';res.kind='ganhou';
       G.nextStarter=r.seat;
@@ -556,13 +573,14 @@ function resBtns(res){
 }
 function showRules(back){
   openLayer('<div class="card"><h2>Pontuação</h2><div class="rules">'
-    +'<span>Bater com qualquer peça (buxa)</span><b>'+SCORE.buxa+'</b>'
-    +'<span>Bater com carroça (buxa dobrada)</span><b>'+SCORE.buxaDobrada+'</b>'
-    +'<span>Lasquinê preso (peça serve nas duas pontas, pontas diferentes)</span><b>'+SCORE.lasquinePreso+'</b>'
-    +'<span>Lasquinê solto (serve nas duas pontas, pontas iguais)</span><b>'+SCORE.lasquineSolto+'</b>'
+    +'<span>Batida simples</span><b>'+SCORE.simples+'</b>'
+    +'<span>Batida de buxa (última peça com o branco)</span><b>'+SCORE.buxa+'</b>'
+    +'<span>Batida de buxa dobrada (o 0|0)</span><b>'+SCORE.buxaDobrada+'</b>'
+    +'<span>Lasquinê solto (a peça serve nas duas pontas e ainda sobram desses números)</span><b>'+SCORE.lasquineSolto+'</b>'
+    +'<span>Lasquinê preso (serve nas duas pontas e não sobra nenhuma)</span><b>'+SCORE.lasquinePreso+'</b>'
     +'<span>Fechou o jogo e tem menos pontos</span><b>'+SCORE.fechou+'</b>'
     +'<span>Fechou e chorou (tem mais pontos)</span><b>'+SCORE.chorou+'</b></div>'
-    +'<p class="small">No fechamento vale a soma das peças da dupla. Empate: ninguém marca. Quem faz '+TARGET+' pontos primeiro ganha. Jogo em duplas: você e o parceiro da frente contra os dois adversários. A mão tem 6 peças, 4 dormem.</p>'
+    +'<p class="small">No fechamento vale a soma das peças da dupla. Empate: ninguém marca e a próxima mão sai com a buxa de sena (0|6). Se duas regras servem, vale a de mais pontos. Quem faz '+TARGET+' pontos primeiro ganha. Jogo em duplas: você e o parceiro da frente contra os dois adversários. A mão tem 6 peças, 4 dormem.</p>'
     +'<button class="btn" id="rc">Voltar</button></div>');
   $('rc').onclick=function(){if(G&&G.handOver)showResult(G.res);else closeLayer()};
 }
@@ -746,10 +764,10 @@ async function loadRankBox(){
     if(ME){try{mine=await DB.raw({t:'me'});ME.wins=mine.wins;ME.games=mine.games}catch(e){}}
     var el=$('rkbox');if(!el)return;
     var list=(r.list||[]).slice(0,5);
-    var rows=list.map(function(u,i){return '<tr'+(ME&&u.nick===ME.nick?' class="me2"':'')+'><td>'+(i+1)+'</td><td>'+esc(u.nick)+'</td><td>'+u.wins+'</td><td>'+u.games+'</td></tr>'}).join('');
+    var rows=list.map(function(u,i){return '<tr'+(ME&&u.nick===ME.nick?' class="me2"':'')+'><td>'+(i+1)+'</td><td>'+esc(u.nick)+'</td><td>'+u.wins+'</td></tr>'}).join('');
     el.innerHTML='<div class="rkhead"><span>Ranking</span><button class="rklink" id="rkall">Ver todos</button></div>'
-      +(ME?'<div class="me"><strong>'+esc(ME.nick)+'</strong><span>'+ME.wins+' vitórias · '+ME.games+' jogos</span></div>':'')
-      +(rows?'<table class="rank"><tr><th>#</th><th>Jogador</th><th>Vitórias</th><th>Jogos</th></tr>'+rows+'</table>':'<p class="small">Ninguém pontuou ainda. Jogue online com um amigo para entrar no ranking.</p>');
+      +(ME?'<div class="me"><strong>'+esc(ME.nick)+'</strong><span>'+ME.wins+(ME.wins===1?' vitória':' vitórias')+'</span></div>':'')
+      +(rows?'<table class="rank"><tr><th>#</th><th>Jogador</th><th>Vitórias</th></tr>'+rows+'</table>':'<p class="small">Ninguém pontuou ainda. Jogue online com um amigo para entrar no ranking.</p>');
     $('rkall').onclick=showRanking;
   }catch(e){}
 }
@@ -757,8 +775,8 @@ async function showRanking(){
   openLayer('<div class="card"><h2>Ranking</h2><p class="small">Carregando...</p></div>');
   var list=[];
   try{var r=await DB.raw({t:'ranking'});list=r.list||[]}catch(e){}
-  var rows=list.map(function(u,i){return '<tr'+(ME&&u.nick===ME.nick?' class="me2"':'')+'><td>'+(i+1)+'</td><td>'+esc(u.nick)+'</td><td>'+u.wins+'</td><td>'+u.games+'</td></tr>'}).join('');
-  openLayer('<div class="card"><h2>Ranking</h2>'+(rows?'<table class="rank"><tr><th>#</th><th>Jogador</th><th>Vitórias</th><th>Jogos</th></tr>'+rows+'</table>':'<p>Ninguém pontuou ainda. Só contam partidas online com pelo menos 2 pessoas.</p>')
+  var rows=list.map(function(u,i){return '<tr'+(ME&&u.nick===ME.nick?' class="me2"':'')+'><td>'+(i+1)+'</td><td>'+esc(u.nick)+'</td><td>'+u.wins+'</td></tr>'}).join('');
+  openLayer('<div class="card"><h2>Ranking</h2>'+(rows?'<table class="rank"><tr><th>#</th><th>Jogador</th><th>Vitórias</th></tr>'+rows+'</table>':'<p>Ninguém pontuou ainda. Só contam partidas online com pelo menos 2 pessoas.</p>')
     +'<button class="btn" id="rb">Voltar</button></div>');
   $('rb').onclick=ME?showOnline:showSetup;
 }
@@ -825,7 +843,7 @@ function pushState(){
   REV++;
   var g=clone({hands:G.hands,chain:G.chain,turn:G.turn,scores:G.scores,passed:G.passed,passes:G.passes,first:G.first,
     nextStarter:G.nextStarter,must:G.must,handOver:G.handOver,over:G.over,lastPlayer:G.lastPlayer,lastPiece:G.lastPiece,
-    msg:G.msg,res:G.res||null,handNo:G.handNo});
+    msg:G.msg,res:G.res||null,handNo:G.handNo,tie:G.tie||false});
   var doc={rev:REV,phase:'play',host:ROOM.host,code:ROOM.code,gameId:G.gameId,seats:ROOM.seats,game:g};
   ROOM=doc;writeDoc(doc);
 }
@@ -972,7 +990,7 @@ function takeover(s){
 }
 function showOnline(){
   openLayer('<div class="card"><h2>Jogar online</h2><p>Cada um joga no seu celular. '+(viaClaude()?'Quem entrar precisa estar logado no claude.ai e ter acesso de colaborador a este jogo.':'Crie a sala e passe o código de 4 letras para os outros jogadores.')+'</p>'
-    +(ME?'<div class="me"><strong>'+esc(ME.nick)+'</strong><span id="mest">'+ME.wins+' vitórias · '+ME.games+' jogos</span></div>'
+    +(ME?'<div class="me"><strong>'+esc(ME.nick)+'</strong><span id="mest">'+ME.wins+(ME.wins===1?' vitória':' vitórias')+'</span></div>'
         :'<div class="seat"><label>Seu nome</label><input id="on" value="'+esc(CFG.names[0])+'" maxlength="14" aria-label="Seu nome"></div>')
     +'<button class="btn" id="oc">Criar sala</button>'
     +'<div class="seat"><label>Código da sala</label><input id="oj" maxlength="4" autocapitalize="characters" placeholder="ABCD" style="text-transform:uppercase" aria-label="Código da sala"></div>'
@@ -986,7 +1004,7 @@ function showOnline(){
   if(ME){
     $('orank').onclick=showRanking;
     $('oout').onclick=logout;
-    DB.raw({t:'me'}).then(function(r){ME.wins=r.wins;ME.games=r.games;var el=$('mest');if(el)el.textContent=r.wins+' vitórias · '+r.games+' jogos'}).catch(function(){});
+    DB.raw({t:'me'}).then(function(r){ME.wins=r.wins;ME.games=r.games;var el=$('mest');if(el)el.textContent=r.wins+(r.wins===1?' vitória':' vitórias')}).catch(function(){});
   }
 }
 

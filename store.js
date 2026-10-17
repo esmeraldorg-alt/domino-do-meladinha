@@ -35,8 +35,9 @@ function fileStore() {
     },
     async top(n) {
       return Object.values(db.users)
-        .sort((a, b) => b.wins - a.wins || a.games - b.games || a.nick.localeCompare(b.nick))
-        .slice(0, n).map((u) => ({ nick: u.nick, wins: u.wins, games: u.games }));
+        .filter((u) => u.wins > 0)
+        .sort((a, b) => b.wins - a.wins || a.nick.localeCompare(b.nick))
+        .slice(0, n).map((u) => ({ nick: u.nick, wins: u.wins }));
     },
   };
 }
@@ -75,8 +76,8 @@ function mongoStore(uri) {
     async addStats(id, { wins, games }) { await ready; await users.updateOne({ id }, { $inc: { wins, games } }); },
     async top(n) {
       await ready;
-      const list = await users.find({}).sort({ wins: -1, games: 1, nick: 1 }).limit(n).toArray();
-      return list.map((u) => ({ nick: u.nick, wins: u.wins, games: u.games }));
+      const list = await users.find({ wins: { $gt: 0 } }).sort({ wins: -1, nick: 1 }).limit(n).toArray();
+      return list.map((u) => ({ nick: u.nick, wins: u.wins }));
     },
   };
 }
