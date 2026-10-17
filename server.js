@@ -75,9 +75,9 @@ function fail(ip) {
   if (!f || Date.now() - f.first > 10 * 60 * 1000) fails.set(ip, { n: 1, first: Date.now() });
   else f.n++;
 }
-function publicUser(u) { return { id: u.id, nick: u.nick, wins: u.wins, games: u.games }; }
+function publicUser(u) { return { id: u.id, nick: u.nick, wins: u.wins || 0, losses: u.losses || 0 }; }
 // A resposta usa "uid" porque "id" já é o número do pedido.
-function userOut(u, token) { return { uid: u.id, nick: u.nick, wins: u.wins, games: u.games, token }; }
+function userOut(u, token) { return { uid: u.id, nick: u.nick, wins: u.wins || 0, losses: u.losses || 0, token }; }
 function newToken(u) { return sign({ id: u.id, exp: Date.now() + TOKEN_DAYS * 86400000 }); }
 
 async function handleAuth(ws, m, reply) {
@@ -98,7 +98,7 @@ async function handleAuth(ws, m, reply) {
     const salt = crypto.randomBytes(16).toString('hex');
     const user = {
       id: 'u_' + crypto.randomBytes(9).toString('hex'), nick, nickLower: nick.toLowerCase(),
-      salt, hash: await scrypt(pass, salt), wins: 0, games: 0, created: Date.now(),
+      salt, hash: await scrypt(pass, salt), wins: 0, losses: 0, games: 0, recent: [], created: Date.now(),
     };
     try { await store.create(user); } catch (e) {
       if (e.code === 'dup') return reply({ error: 'nick_em_uso' });
@@ -117,7 +117,7 @@ async function handleAuth(ws, m, reply) {
 }
 
 /* ---------- ranking ---------- */
-// Conta só partida terminada com pelo menos 2 pessoas diferentes, uma vez por jogo.
+// Partida online terminada: cada pessoa com conta ganha vitória ou derrota, uma vez por jogo (robôs não pontuam).
 async function recordIfDone(room, doc) {
   const g = doc.game;
   if (!g || !g.over || !doc.gameId || room.recorded === doc.gameId) return;
@@ -127,11 +127,13 @@ async function recordIfDone(room, doc) {
     const x = doc.seats && doc.seats[s];
     if (x && x.type === 'human' && x.uid) humans.push({ s, uid: x.uid });
   }
-  if (new Set(humans.map((h) => h.uid)).size < 2) return;
   const win = g.scores[0] >= g.scores[1] ? 0 : 1;
   // Em duplas as cadeiras 0 e 2 formam a dupla A; no 1 contra 1 a cadeira 0 é o time 0 e a 2 o time 1.
   const teamOf = (s) => (doc.mode === '2' ? s >> 1 : s % 2);
-  for (const h of humans) await store.addStats(h.uid, { wins: teamOf(h.s) === win ? 1 : 0, games: 1 });
+  for (const h of humans) {
+    const won = teamOf(h.s) === win;
+    await store.addStats(h.uid, { wins: won ? 1 : 0, losses: won ? 0 : 1, games: 1 }, doc.gameId);
+  }
 }
 
 /* ---------- conexões ---------- */
@@ -161,6 +163,30 @@ async function handle(ws, m) {
   if (m.t === 'ranking') return reply({ list: await store.top(20) }); // público: aparece já na tela inicial
   if (!ws.user) return reply({ error: 'auth' });
   if (m.t === 'me') { const u = await store.byId(ws.user.id); return reply(u ? userOut(u) : { error: 'auth' }); }
+  if (m.t === 'rooms') {
+    // Mesas com alguém conectado: no lobby (com ou sem vaga) e em jogo. Qualquer pessoa com conta pode assistir.
+    const list = [];
+    rooms.forEach((r, code) => {
+      const d = r.doc;
+      if (!d || !r.subs.size || !d.seats) return;
+      const seats = d.mode === '2' ? [0, 2] : [0, 1, 2, 3];
+      const open = d.phase === 'lobby' ? seats.filter((s) => d.seats[s] && d.seats[s].type === 'open').length : 0;
+      const players = seats.filter((s) => d.seats[s] && d.seats[s].type === 'human').map((s) => d.seats[s].name);
+      const item = { code, mode: d.mode === '2' ? '2' : '4', playing: d.phase === 'play', players, open, touched: r.touched };
+      if (item.playing && d.game && Array.isArray(d.game.scores)) item.scores = d.game.scores;
+      list.push(item);
+    });
+    list.sort((a, b) => b.touched - a.touched);
+    return reply({ list: list.slice(0, 20).map(({ touched, ...rest }) => rest) });
+  }
+  if (m.t === 'result') {
+    // Partida local (contra robôs ou no mesmo celular) que chegou ao fim: vale para quem está com a conta.
+    const gameId = String(m.gameId || '').slice(0, 40);
+    if (!gameId || typeof m.win !== 'boolean') return reply({ error: 'invalid_argument' });
+    await store.addStats(ws.user.id, { wins: m.win ? 1 : 0, losses: m.win ? 0 : 1, games: 1 }, 'L' + gameId);
+    const u = await store.byId(ws.user.id);
+    return reply(u ? userOut(u) : { error: 'auth' });
+  }
 
   const code = String(m.code || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
   if (code.length !== 4) return;
@@ -201,6 +227,9 @@ async function handle(ws, m) {
     }
     case 'update': {
       if (!room || !room.doc || !isObj(m.data)) return reply({ error: 'invalid_argument' });
+      // Só o lobby aceita mudanças (sentar, trocar vaga, trocar modo); quem assiste não mexe na partida.
+      if (room.doc.phase !== 'lobby') return reply({ error: 'jogo_ja_comecou' });
+      if (m.data.mode !== undefined && room.doc.host !== ws.user.id) delete m.data.mode;
       // Quem senta numa vaga usa a identidade da própria conta, não a que o aparelho disser.
       const seats = m.data.seats;
       if (isObj(seats)) {
@@ -225,7 +254,9 @@ async function handle(ws, m) {
       ws.lastChat = now;
       const x = String(m.text || '').trim().slice(0, 200);
       if (!x) return;
+      const seated = room.doc && Object.values(room.doc.seats || {}).some((s) => s && s.uid === ws.user.id);
       const msg = { n: ws.user.nick, x, ts: now };
+      if (!seated) msg.w = true; // quem assiste aparece como "assistindo"
       room.chat.push(msg); if (room.chat.length > 60) room.chat.shift();
       const out = JSON.stringify({ t: 'chat', code, msg });
       room.subs.forEach((w) => { if (w.readyState === 1) w.send(out); });

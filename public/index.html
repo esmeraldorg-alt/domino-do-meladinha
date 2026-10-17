@@ -143,6 +143,12 @@ input{user-select:text;-webkit-user-select:text}
 .rank td:first-child,.rank th:first-child{width:34px;color:var(--mute)}
 .rank td:nth-child(n+3),.rank th:nth-child(n+3){text-align:right}
 .rank tr.me2 td{color:var(--gold);font-weight:700}
+.mesas{display:flex;flex-direction:column;gap:6px}
+.mesa{display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--felt-deep);border-radius:10px;padding:8px 10px}
+.mesa .mi{min-width:0;font-size:15px}
+.mesa .mi small{display:block;font-size:12px;color:var(--mute);overflow-wrap:anywhere}
+.mesa .mb{display:flex;gap:6px;flex:0 0 auto}
+.mesa .btn{flex:0 0 auto;min-width:72px;min-height:40px;padding:0 12px;font-size:15px}
 #rkbox:empty{display:none}
 #rkbox{display:flex;flex-direction:column;gap:6px;background:var(--felt-deep);border-radius:10px;padding:8px 10px}
 .rkhead{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
@@ -201,7 +207,7 @@ var $=function(id){return document.getElementById(id)};
 var CFG={names:['Você','Robô Direita','Parceiro Robô','Robô Esquerda'],human:[true,false,false,false]};
 try{var sv=JSON.parse(localStorage.getItem('domino-cfg')||'null');if(sv&&sv.names&&sv.human){CFG=sv;CFG.human[0]=true}}catch(e){}
 var G=null;
-var NP=4,LOCALNP=(function(){try{return localStorage.getItem('domino-np')==='2'?2:4}catch(e){return 4}})(),ONLINE=false,MYSEAT=0,IAMHOST=false,ROOM=null,ROOMREF=null,REV=0,DB=null,UID=null,UNSUB=null,SAVED=null,MYNAME='',shownHand=-1;
+var NP=4,LOCALNP=(function(){try{return localStorage.getItem('domino-np')==='2'?2:4}catch(e){return 4}})(),ONLINE=false,WATCH=false,MYSEAT=0,IAMHOST=false,ROOM=null,ROOMREF=null,REV=0,DB=null,UID=null,UNSUB=null,SAVED=null,MYNAME='',shownHand=-1;
 
 /* ---------- peças ---------- */
 function pips(n){
@@ -269,18 +275,18 @@ function isClosed(){
   return true;
 }
 function nm(s){return CFG.names[s]||('Jogador '+(s+1))}
-function myTeam(){return ONLINE?team(MYSEAT):0}
+function myTeam(){return ONLINE&&MYSEAT>=0?team(MYSEAT):0}
 function teamName(t){
   if(NP===2)return nm(t*2);
-  return humanCount()>1?('Dupla '+(t?'B':'A')):(t===myTeam()?'Nós':'Eles');
+  return humanCount()>1||WATCH?('Dupla '+(t?'B':'A')):(t===myTeam()?'Nós':'Eles');
 }
 function dupla(t){
   if(NP===2)return nm(t*2);
-  return humanCount()>1?('a Dupla '+(t?'B':'A')):(t===myTeam()?'a nossa dupla':'a dupla adversária');
+  return humanCount()>1||WATCH?('a Dupla '+(t?'B':'A')):(t===myTeam()?'a nossa dupla':'a dupla adversária');
 }
 function venceu(t){
-  if(NP===2)return (humanCount()===1&&t===myTeam())?'Você venceu!':nm(t*2)+' venceu!';
-  return humanCount()>1?('A Dupla '+(t?'B':'A')+' venceu!'):(t===myTeam()?'Nós vencemos!':'Eles venceram!');
+  if(NP===2)return (humanCount()===1&&!WATCH&&t===myTeam())?'Você venceu!':nm(t*2)+' venceu!';
+  return humanCount()>1||WATCH?('A Dupla '+(t?'B':'A')+' venceu!'):(t===myTeam()?'Nós vencemos!':'Eles venceram!');
 }
 function humanCount(){return ONLINE?1:CFG.human.filter(Boolean).length}
 function resText(r){
@@ -483,20 +489,31 @@ function endHand(r){
   if(res.winner>=0)G.scores[res.winner]+=res.points;
   if(res.winner>=0&&G.scores[res.winner]>=TARGET){G.over=true;res.final=res.winner}
   G.res=res;
-  if(ONLINE){shownHand=G.handNo;pushState()}
+  if(ONLINE){shownHand=G.handNo;pushState()}else reportResult(res);
   render();
   setTimeout(function(){showResult(res)},2200);
 }
 
 /* ---------- interface ---------- */
-function viewSeat(){return ONLINE?MYSEAT:(humanCount()>1?G.viewer:0)}
+/* Partida local (contra robôs ou no mesmo celular) que chegou ao fim: quem está com a conta ganha vitória ou derrota no ranking. */
+var RANKNOTE='';
+function reportResult(res){
+  RANKNOTE='';
+  if(res.final===undefined||viaClaude()||!ME||!DB||!CFG.human[0])return;
+  var win=res.final===team(0);
+  DB.raw({t:'result',gameId:G.gameId,win:win}).then(function(r){
+    ME.wins=r.wins;ME.losses=r.losses||0;
+    RANKNOTE=(win?'Vitória':'Derrota')+' registrada no ranking.';
+  }).catch(function(){});
+}
+function viewSeat(){return ONLINE?(MYSEAT>=0?MYSEAT:0):(humanCount()>1?G.viewer:0)}
 function render(){
   if(!G)return;
   var v=viewSeat(),mineT=team(v);
   [0,1].forEach(function(t){
     var el=$(t?'tB':'tA');
     var seats=activeSeats().filter(function(s){return team(s)===t}).map(nm).join(' + ');
-    el.className='team '+(t?'b':'a')+(t===mineT&&humanCount()===1?' mine':'');
+    el.className='team '+(t?'b':'a')+(t===mineT&&humanCount()===1&&!WATCH?' mine':'');
     el.innerHTML='<div class="tn">'+(NP===2?esc(seats):esc(teamName(t))+' · '+esc(seats))+'</div><div class="pts">'+G.scores[t]+'</div><div class="bar"><i style="width:'+Math.min(100,G.scores[t]/TARGET*100)+'%"></i></div>';
   });
   var order=NP===2?[(v+2)%4]:[(v+3)%4,(v+2)%4,(v+1)%4];
@@ -512,12 +529,12 @@ function render(){
     +(NP===2?'<span class="mt">Monte: '+G.monte.length+'</span>':'');
   renderBoard();
   $('btnChat').hidden=!chatEnabled();
-  var myTurn=!G.handOver&&G.turn===v&&CFG.human[v]&&!G.cover;
+  var myTurn=!G.handOver&&G.turn===v&&CFG.human[v]&&!G.cover&&!WATCH;
   var st=$('status');
   st.className=myTurn?'you':'';
-  st.textContent=myTurn&&legalMoves(v).length?(G.must&&!G.chain.length?'Sua vez: jogue a '+G.must.a+'|'+G.must.b+'.':'Sua vez. Toque numa peça que brilha.'):(ONLINE&&!G.handOver&&G.turn!==v?'Vez de '+nm(G.turn)+'. '+G.msg:G.msg);
-  $('who').textContent=nm(v)+' · '+pipsOf(G.hands[v])+' pontos na mão';
-  var hide=humanCount()>1&&G.turn!==v;
+  st.textContent=myTurn&&legalMoves(v).length?(G.must&&!G.chain.length?'Sua vez: jogue a '+G.must.a+'|'+G.must.b+'.':'Sua vez. Toque numa peça que brilha.'):(ONLINE&&!G.handOver&&(WATCH||G.turn!==v)?'Vez de '+nm(G.turn)+'. '+G.msg:G.msg);
+  $('who').textContent=WATCH?'Você está assistindo a esta mesa':nm(v)+' · '+pipsOf(G.hands[v])+' pontos na mão';
+  var hide=(humanCount()>1&&G.turn!==v)||WATCH;
   var mv=myTurn?legalMoves(v):[];
   // Tamanho da pedra ajustado ao espaço: até 7 por fila, e quebra em outra fila se o jogador comprar muitas.
   var cols=Math.min(Math.max(G.hands[v].length,1),7),avail=$('app').clientWidth||336;
@@ -563,7 +580,7 @@ function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp
 
 $('hand').addEventListener('click',function(ev){
   var b=ev.target.closest('.hp');if(!b||b.disabled||!G||G.handOver)return;
-  var v=viewSeat();if(G.turn!==v||!CFG.human[v])return;
+  var v=viewSeat();if(WATCH||G.turn!==v||!CFG.human[v])return;
   var p=G.hands[v][+b.dataset.i];
   var mv=legalMoves(v).filter(function(m){return m.p===p});
   if(!mv.length)return;
@@ -591,7 +608,8 @@ function showResult(res){
     var h=res.hands[s].map(function(p){return svgPiece(p.a,p.b,false,36,18)}).join('');
     return '<div class="hrow"><div class="hn">'+esc(nm(s))+'</div><div class="hp2">'+(h||'<span class="small">sem peças</span>')+'</div><div class="hs">'+res.pips[s]+'</div></div>';
   }).join('');
-  var head=res.final!==undefined?'<div class="big">'+esc(venceu(res.final))+'</div><p>Chegou a '+G.scores[res.final]+' pontos. Placar final: '+G.scores[0]+' a '+G.scores[1]+'.</p>':'';
+  var note=res.final===undefined?'':(ONLINE?'Partida registrada no ranking.':(RANKNOTE||(ME||viaClaude()?'':'Entre em Jogar online com a sua conta para as partidas contarem no ranking.')));
+  var head=res.final!==undefined?'<div class="big">'+esc(venceu(res.final))+'</div><p>Chegou a '+G.scores[res.final]+' pontos. Placar final: '+G.scores[0]+' a '+G.scores[1]+'.</p>'+(note?'<p class="small">'+esc(note)+'</p>':''):'';
   openLayer('<div class="card"><div class="big'+(res.bad?' bad':'')+'">'+esc(res.title)+(res.points?' · +'+res.points:'')+'</div>'
     +'<p>'+esc(resText(res))+'</p>'+head
     +'<div class="hands">'+rows+'</div>'
@@ -764,7 +782,7 @@ async function ensureNet(){
 }
 /* ---------- conta: apelido e senha ---------- */
 function applyAuth(r){
-  ME={id:r.uid,nick:r.nick,wins:r.wins||0,games:r.games||0};UID=ME.id;MYNAME=ME.nick;
+  ME={id:r.uid,nick:r.nick,wins:r.wins||0,losses:r.losses||0};UID=ME.id;MYNAME=ME.nick;
   if(r.token)setToken(r.token);
 }
 async function autoLogin(){
@@ -808,19 +826,26 @@ function authError(c){
     auth:'Sessão expirada. Entre de novo.'}[c]||'Não foi possível conectar. Tente de novo.';
 }
 /* Ranking resumido na tela inicial: top 5 e, se já tem conta neste aparelho, a sua pontuação. */
+function statTxt(w,l){return w+(w===1?' vitória':' vitórias')+' · '+l+(l===1?' derrota':' derrotas')}
+function rankRows(list,max){
+  return list.slice(0,max).map(function(u,i){
+    return '<tr'+(ME&&u.nick===ME.nick?' class="me2"':'')+'><td>'+(i+1)+'</td><td>'+esc(u.nick)+'</td><td>'+u.wins+'</td><td>'+(u.losses||0)+'</td></tr>';
+  }).join('');
+}
+var RANK_HEAD='<tr><th>#</th><th>Jogador</th><th>Vitórias</th><th>Derrotas</th></tr>';
 async function loadRankBox(){
   if(viaClaude()||!/^https?:$/.test(location.protocol)||!$('rkbox'))return;
   try{
     netDB();
     if(!ME&&getToken())await autoLogin();
     var mine=null,r=await DB.raw({t:'ranking'});
-    if(ME){try{mine=await DB.raw({t:'me'});ME.wins=mine.wins;ME.games=mine.games}catch(e){}}
+    if(ME){try{mine=await DB.raw({t:'me'});ME.wins=mine.wins;ME.losses=mine.losses||0}catch(e){}}
     var el=$('rkbox');if(!el)return;
-    var list=(r.list||[]).slice(0,5);
-    var rows=list.map(function(u,i){return '<tr'+(ME&&u.nick===ME.nick?' class="me2"':'')+'><td>'+(i+1)+'</td><td>'+esc(u.nick)+'</td><td>'+u.wins+'</td></tr>'}).join('');
+    var rows=rankRows(r.list||[],5);
     el.innerHTML='<div class="rkhead"><span>Ranking</span><button class="rklink" id="rkall">Ver todos</button></div>'
-      +(ME?'<div class="me"><strong>'+esc(ME.nick)+'</strong><span>'+ME.wins+(ME.wins===1?' vitória':' vitórias')+'</span></div>':'')
-      +(rows?'<table class="rank"><tr><th>#</th><th>Jogador</th><th>Vitórias</th></tr>'+rows+'</table>':'<p class="small">Ninguém pontuou ainda. Jogue online com um amigo para entrar no ranking.</p>');
+      +(ME?'<div class="me"><strong>'+esc(ME.nick)+'</strong><span>'+statTxt(ME.wins,ME.losses)+'</span></div>'
+          :'<p class="small">Entre em Jogar online para criar a conta. As partidas contra robôs e contra amigos contam no ranking.</p>')
+      +(rows?'<table class="rank">'+RANK_HEAD+rows+'</table>':'<p class="small">Ninguém terminou uma partida ainda.</p>');
     $('rkall').onclick=showRanking;
   }catch(e){}
 }
@@ -828,8 +853,9 @@ async function showRanking(){
   openLayer('<div class="card"><h2>Ranking</h2><p class="small">Carregando...</p></div>');
   var list=[];
   try{var r=await DB.raw({t:'ranking'});list=r.list||[]}catch(e){}
-  var rows=list.map(function(u,i){return '<tr'+(ME&&u.nick===ME.nick?' class="me2"':'')+'><td>'+(i+1)+'</td><td>'+esc(u.nick)+'</td><td>'+u.wins+'</td></tr>'}).join('');
-  openLayer('<div class="card"><h2>Ranking</h2>'+(rows?'<table class="rank"><tr><th>#</th><th>Jogador</th><th>Vitórias</th></tr>'+rows+'</table>':'<p>Ninguém pontuou ainda. Só contam partidas online com pelo menos 2 pessoas.</p>')
+  var rows=rankRows(list,20);
+  openLayer('<div class="card"><h2>Ranking</h2>'+(rows?'<table class="rank">'+RANK_HEAD+rows+'</table>':'<p>Ninguém terminou uma partida ainda.</p>')
+    +'<p class="small">Contam as partidas que chegam a '+TARGET+' pontos, contra robôs ou contra pessoas, para quem está com a conta.</p>'
     +'<button class="btn" id="rb">Voltar</button></div>');
   $('rb').onclick=ME?showOnline:showSetup;
 }
@@ -841,7 +867,7 @@ function logout(){
 /* ---------- chat da sala ---------- */
 function chatLine(m){
   var mine=ME&&m.n===ME.nick;
-  return '<div class="msg'+(mine?' mine':'')+'"><small>'+esc(m.n)+'</small>'+esc(m.x)+'</div>';
+  return '<div class="msg'+(mine?' mine':'')+'"><small>'+esc(m.n)+(m.w?' · assistindo':'')+'</small>'+esc(m.x)+'</div>';
 }
 function onChat(m){
   if(m.t==='chathist'){CHAT=m.list||[];unread=0}
@@ -856,7 +882,7 @@ function onChat(m){
 function showToast(msg){
   var box=$('toasts'),el=document.createElement('div');
   el.className='toast';
-  el.innerHTML='<b>'+esc(msg.n)+'</b>'+esc(msg.x);
+  el.innerHTML='<b>'+esc(msg.n)+(msg.w?' (assistindo)':'')+'</b>'+esc(msg.x);
   el.onclick=function(){el.remove();openChat()};
   box.appendChild(el);
   while(box.children.length>3)box.firstChild.remove();
@@ -925,13 +951,13 @@ function onRoom(snap){
   }
   var doc=clone(snap.data());
   if(doc.phase==='lobby'){
-    if(!G){ROOM=doc;var m=mySeatIn(doc.seats);if(m>=0)MYSEAT=m;renderLobby()}
+    if(!G){ROOM=doc;var m=mySeatIn(doc.seats);if(m>=0){MYSEAT=m;WATCH=false}renderLobby()}
     return;
   }
   if(G&&doc.rev<=REV)return;
   if(!G){
     var me=mySeatIn(doc.seats);
-    if(me<0){leaveRoom();showOnline();netMsg('Esse jogo já começou e você não tem lugar nele.');return}
+    if(me<0&&!WATCH){leaveRoom();showOnline();netMsg('Esse jogo já começou e você não tem lugar nele.');return}
     MYSEAT=me;
   }
   setupFromSeats(doc.seats);
@@ -957,7 +983,7 @@ window.addEventListener('popstate',function(){
   askLeave();
 });
 function askLeave(){
-  $('leavetxt').textContent=ONLINE
+  $('leavetxt').textContent=WATCH?'Você sai da mesa e para de assistir.':ONLINE
     ?(IAMHOST?'Você é o anfitrião. Se sair, a sala é encerrada para todos.':'Você sai da sala e a partida continua sem você.')
     :'A partida em andamento será perdida.';
   $('leave').hidden=false;
@@ -971,7 +997,7 @@ $('lout').onclick=function(){
 function leaveRoom(){
   if(UNSUB){UNSUB();UNSUB=null}
   if(IAMHOST&&ROOMREF){try{ROOMREF.delete()}catch(e){}}
-  ROOMREF=null;ROOM=null;ONLINE=false;IAMHOST=false;G=null;REV=0;shownHand=-1;wnext=null;NP=LOCALNP;
+  ROOMREF=null;ROOM=null;ONLINE=false;IAMHOST=false;WATCH=false;G=null;REV=0;shownHand=-1;wnext=null;NP=LOCALNP;
   disarmTurn();closeChat();$('btnChat').hidden=true;CHAT=[];unread=0;
   if(SAVED){CFG.names=SAVED.names;CFG.human=SAVED.human;SAVED=null}
   ['opps','ends','board','status','who','hand','tA','tB'].forEach(function(id){$(id).innerHTML=''});
@@ -996,6 +1022,17 @@ async function joinRoom(code,name){
   var doc=clone(sn.data()),me=mySeatIn(doc.seats);
   if(doc.phase==='play'&&me<0){netMsg('Esse jogo já começou.');return}
   MYNAME=name;ROOMREF=ref;ROOM=doc;enterOnline(me,doc.host===UID);REV=0;
+  subscribe();
+  if(doc.phase==='lobby')renderLobby();
+}
+/* Assistir uma mesa: entra só para ver (as peças dos jogadores ficam escondidas) e pode escrever no chat. */
+async function watchRoom(code){
+  if(!(await ensureNet())){netMsg('Sem conexão com o servidor.');return}
+  var ref=DB.doc('rooms/'+code),sn;
+  try{sn=await ref.get()}catch(e){netMsg('Não consegui acessar a mesa.');return}
+  if(!sn.exists){netMsg('Mesa não encontrada.');return}
+  var doc=clone(sn.data());
+  WATCH=true;MYNAME=ME?ME.nick:MYNAME;ROOMREF=ref;ROOM=doc;enterOnline(-1,false);REV=0;
   subscribe();
   if(doc.phase==='lobby')renderLobby();
 }
@@ -1052,11 +1089,39 @@ function takeover(s){
   CFG.human[s]=false;CFG.names[s]=ROOM.seats[s].name;
   closeLayer();pushState();step(true);
 }
+/* Lista de mesas abertas com quem já está nelas; atualiza a cada 4 segundos enquanto a tela está aberta. */
+var TABLES_T=null;
+function stopTables(){if(TABLES_T){clearInterval(TABLES_T);TABLES_T=null}}
+function startTables(){
+  stopTables();
+  function tick(){
+    if(!$('mesas')||!ME||!DB){stopTables();return}
+    DB.raw({t:'rooms'}).then(function(r){
+      var el=$('mesas');if(!el){stopTables();return}
+      var list=r.list||[];
+      el.innerHTML=list.length?list.map(function(m){
+        var info=m.playing?'em jogo'+(m.scores?' · '+m.scores[0]+' x '+m.scores[1]:''):(m.open?m.open+(m.open===1?' vaga':' vagas'):'mesa cheia');
+        return '<div class="mesa"><div class="mi"><strong>'+esc(m.code)+'</strong> · '+(m.mode==='2'?'1 contra 1':'Duplas')
+          +'<small>'+esc(m.players.join(', ')||'ninguém ainda')+' · '+info+'</small></div>'
+          +'<div class="mb">'+(m.open?'<button class="btn" data-join="'+esc(m.code)+'">Entrar</button>':'')
+          +'<button class="btn ghost" data-watch="'+esc(m.code)+'">Assistir</button></div></div>';
+      }).join(''):'<p class="small">Nenhuma mesa agora. Crie uma e chame um amigo.</p>';
+      el.querySelectorAll('[data-join]').forEach(function(b){
+        b.onclick=function(){netMsg('Entrando...');joinRoom(b.dataset.join,ME.nick)};
+      });
+      el.querySelectorAll('[data-watch]').forEach(function(b){
+        b.onclick=function(){netMsg('Abrindo a mesa...');watchRoom(b.dataset.watch)};
+      });
+    }).catch(function(){});
+  }
+  tick();TABLES_T=setInterval(tick,4000);
+}
 function showOnline(){
   openLayer('<div class="card"><h2>Jogar online</h2><p>Cada um joga no seu celular. '+(viaClaude()?'Quem entrar precisa estar logado no claude.ai e ter acesso de colaborador a este jogo.':'Crie a sala e passe o código de 4 letras para os outros jogadores.')+'</p>'
-    +(ME?'<div class="me"><strong>'+esc(ME.nick)+'</strong><span id="mest">'+ME.wins+(ME.wins===1?' vitória':' vitórias')+'</span></div>'
+    +(ME?'<div class="me"><strong>'+esc(ME.nick)+'</strong><span id="mest">'+statTxt(ME.wins,ME.losses)+'</span></div>'
         :'<div class="seat"><label>Seu nome</label><input id="on" value="'+esc(CFG.names[0])+'" maxlength="14" aria-label="Seu nome"></div>')
     +'<button class="btn" id="oc">Criar sala</button>'
+    +(ME?'<div class="rkhead"><span>Mesas abertas</span></div><div id="mesas" class="mesas"></div>':'')
     +'<div class="seat"><label>Código da sala</label><input id="oj" maxlength="4" autocapitalize="characters" placeholder="ABCD" style="text-transform:uppercase" aria-label="Código da sala"></div>'
     +'<button class="btn" id="oe">Entrar na sala</button><p class="small" id="omsg"></p>'
     +(ME?'<div class="btns"><button class="btn ghost" id="orank">Ranking</button><button class="btn ghost" id="oout">Sair da conta</button></div>':'')
@@ -1066,9 +1131,10 @@ function showOnline(){
   $('oe').onclick=function(){netMsg('Entrando...');joinRoom($('oj').value,nameOf())};
   $('ob').onclick=showSetup;
   if(ME){
+    startTables();
     $('orank').onclick=showRanking;
     $('oout').onclick=logout;
-    DB.raw({t:'me'}).then(function(r){ME.wins=r.wins;ME.games=r.games;var el=$('mest');if(el)el.textContent=r.wins+(r.wins===1?' vitória':' vitórias')}).catch(function(){});
+    DB.raw({t:'me'}).then(function(r){ME.wins=r.wins;ME.losses=r.losses||0;var el=$('mest');if(el)el.textContent=statTxt(ME.wins,ME.losses)}).catch(function(){});
   }
 }
 

@@ -29,15 +29,20 @@ function fileStore() {
       if (await this.byNick(u.nickLower)) throw Object.assign(new Error('dup'), { code: 'dup' });
       db.users[u.id] = u; save(); return u;
     },
-    async addStats(id, { wins, games }) {
-      const u = db.users[id]; if (!u) return;
-      u.wins += wins; u.games += games; save();
+    // Cada partida (gameId) conta uma vez por jogador; devolve false se já tinha sido contada.
+    async addStats(id, { wins, losses, games }, gameId) {
+      const u = db.users[id]; if (!u) return false;
+      u.recent = (u.recent || []).slice(-30);
+      if (u.recent.includes(gameId)) return false;
+      u.recent.push(gameId);
+      u.wins = (u.wins || 0) + wins; u.losses = (u.losses || 0) + losses; u.games = (u.games || 0) + games;
+      save(); return true;
     },
     async top(n) {
       return Object.values(db.users)
-        .filter((u) => u.wins > 0)
-        .sort((a, b) => b.wins - a.wins || a.nick.localeCompare(b.nick))
-        .slice(0, n).map((u) => ({ nick: u.nick, wins: u.wins }));
+        .filter((u) => (u.games || 0) > 0)
+        .sort((a, b) => (b.wins || 0) - (a.wins || 0) || (a.losses || 0) - (b.losses || 0) || a.nick.localeCompare(b.nick))
+        .slice(0, n).map((u) => ({ nick: u.nick, wins: u.wins || 0, losses: u.losses || 0 }));
     },
   };
 }
@@ -73,11 +78,19 @@ function mongoStore(uri) {
       try { await users.insertOne(u); } catch (e) { if (e.code === 11000) throw Object.assign(new Error('dup'), { code: 'dup' }); throw e; }
       return u;
     },
-    async addStats(id, { wins, games }) { await ready; await users.updateOne({ id }, { $inc: { wins, games } }); },
+    // Cada partida (gameId) conta uma vez por jogador; devolve false se já tinha sido contada.
+    async addStats(id, { wins, losses, games }, gameId) {
+      await ready;
+      const r = await users.updateOne(
+        { id, recent: { $ne: gameId } },
+        { $inc: { wins, losses, games }, $push: { recent: { $each: [gameId], $slice: -30 } } },
+      );
+      return r.modifiedCount > 0;
+    },
     async top(n) {
       await ready;
-      const list = await users.find({ wins: { $gt: 0 } }).sort({ wins: -1, nick: 1 }).limit(n).toArray();
-      return list.map((u) => ({ nick: u.nick, wins: u.wins }));
+      const list = await users.find({ games: { $gt: 0 } }).sort({ wins: -1, losses: 1, nick: 1 }).limit(n).toArray();
+      return list.map((u) => ({ nick: u.nick, wins: u.wins || 0, losses: u.losses || 0 }));
     },
   };
 }
