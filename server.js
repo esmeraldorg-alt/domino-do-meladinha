@@ -10,6 +10,7 @@ const makeStore = require('./store');
 const PORT = process.env.PORT || 3000;
 const MAX_DOC = 256 * 1024;
 const TOKEN_DAYS = 90;
+const EMOJIS = ['😀', '😂', '😎', '😡', '😭', '👏', '👍', '🔥', '🤔', '🙏'];
 const store = makeStore();
 const rooms = new Map(); // código -> { doc, subs:Set<ws>, touched, chat:[], recorded }
 let SECRET = null;
@@ -274,6 +275,16 @@ async function handle(ws, m) {
       if (room && room.doc && room.doc.host === ws.user.id) { room.doc = null; broadcast(code, room); }
       reply({});
       break;
+    case 'emoji': {
+      // Reação rápida: só emojis da lista, no máximo uma a cada 1,2 segundo.
+      if (!room || !room.subs.has(ws) || !EMOJIS.includes(m.e)) return;
+      const agora = Date.now();
+      if (agora - (ws.lastEmoji || 0) < 1200) return;
+      ws.lastEmoji = agora;
+      const out = JSON.stringify({ t: 'emoji', code, n: ws.user.nick, e: m.e });
+      room.subs.forEach((w) => { if (w.readyState === 1) w.send(out); });
+      break;
+    }
     case 'leave':
       if (room) { convertSeat(room, code, ws.user.id); room.subs.delete(ws); }
       ws.codes.delete(code);
