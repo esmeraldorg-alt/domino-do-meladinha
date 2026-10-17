@@ -1,8 +1,8 @@
 {
   "name": "domino-do-meladinha",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "scripts": { "start": "node server.js" },
-  "dependencies": { "ws": "^8.18.0" },
+  "dependencies": { "mongodb": "^6.10.0", "ws": "^8.18.0" },
   "engines": { "node": ">=18" }
 }

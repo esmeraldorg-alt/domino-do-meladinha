@@ -106,7 +106,48 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-o
 .rules{display:grid;grid-template-columns:1fr auto;gap:6px 10px;font-size:15px}
 .rules b{font-family:var(--display);font-weight:400;color:var(--gold);font-variant-numeric:tabular-nums}
 .small{font-size:13px;color:var(--mute)}
-@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+input{user-select:text;-webkit-user-select:text}
+#board{justify-content:flex-start}
+.snake{position:relative;margin:auto}
+.snake .pc{position:absolute;filter:drop-shadow(0 1px 1px rgba(0,0,0,.5))}
+.pc.last .pc-body{stroke:var(--gold);stroke-width:3.5}
+.snake .pc.last{animation:pop .5s ease-out;filter:drop-shadow(0 0 7px rgba(236,189,63,.95))}
+@keyframes pop{0%{transform:scale(1.5);opacity:.2}60%{transform:scale(.94)}100%{transform:scale(1);opacity:1}}
+
+/* relógio da jogada */
+#tbar{position:relative;height:14px;border-radius:7px;background:var(--felt);border:1px solid var(--felt-lite);overflow:hidden}
+#tbar[hidden]{display:none}
+#tbar i{display:block;height:100%;background:var(--gold);width:100%;transition:width .2s linear}
+#tbar.low i{background:var(--brick)}
+#tsec{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;text-shadow:0 1px 2px #000;font-variant-numeric:tabular-nums}
+
+/* conta, ranking e chat */
+.menu.txt{width:auto;padding:0 12px;font-size:14px;font-weight:700;position:relative}
+.menu.txt b{position:absolute;top:-6px;right:-6px;min-width:20px;height:20px;border-radius:10px;background:var(--brick);color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center;padding:0 5px}
+.menu[hidden],.menu.txt b[hidden]{display:none}
+.me{display:flex;align-items:baseline;justify-content:space-between;gap:8px;background:var(--felt-deep);border-radius:10px;padding:10px 12px}
+.me strong{font-family:var(--display);font-weight:400;font-size:20px;color:var(--gold);min-width:0;overflow:hidden;text-overflow:ellipsis}
+.me span{font-size:13px;color:var(--mute);white-space:nowrap}
+.rank{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.rank td,.rank th{padding:7px 6px;text-align:left;border-bottom:1px solid var(--felt-lite);font-size:15px}
+.rank th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
+.rank td:first-child,.rank th:first-child{width:34px;color:var(--mute)}
+.rank td:nth-child(n+3),.rank th:nth-child(n+3){text-align:right}
+.rank tr.me2 td{color:var(--gold);font-weight:700}
+.err{color:#ff9d85;font-size:14px;min-height:18px;margin:0}
+#chat{position:fixed;inset:0;z-index:30;background:rgba(4,20,14,.94);display:flex;flex-direction:column;
+  padding:max(12px,env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) max(12px,env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px))}
+#chat[hidden]{display:none}
+#chat .ch{display:flex;align-items:center;justify-content:space-between;max-width:520px;width:100%;margin:0 auto 8px}
+#chat .ch h2{font-size:22px;color:var(--gold)}
+#chatlist{flex:1;min-height:0;overflow:auto;max-width:520px;width:100%;margin:0 auto;display:flex;flex-direction:column;gap:6px;padding:4px 0;user-select:text;-webkit-user-select:text}
+.msg{background:var(--felt);border-radius:10px;padding:6px 10px;max-width:86%;align-self:flex-start;overflow-wrap:anywhere}
+.msg.mine{align-self:flex-end;background:var(--felt-lite)}
+.msg small{display:block;font-size:11px;font-weight:700;color:var(--gold)}
+.chatrow{display:flex;gap:8px;max-width:520px;width:100%;margin:8px auto 0}
+.chatrow input{flex:1;min-width:0;height:46px;border-radius:10px;border:1px solid var(--felt-lite);background:var(--felt);color:var(--ink);padding:0 12px;font:inherit;font-size:16px}
+.chatrow .btn{min-width:84px;flex:0 0 auto}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 @media (max-height:640px){#hand{min-height:80px}.hp.back i,.hp svg{height:76px!important;width:38px!important}.team .pts{font-size:24px}}
 </style>
 
@@ -114,20 +155,27 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-o
   <div class="top">
     <div class="team a" id="tA"></div>
     <div class="team b" id="tB"></div>
+    <button class="menu txt" id="btnChat" hidden>Chat<b id="cbadge" hidden>0</b></button>
     <button class="menu" id="btnMenu" aria-label="Menu">☰</button>
   </div>
   <div class="opps" id="opps"></div>
   <div class="ends" id="ends"></div>
   <div id="board"></div>
   <div id="status"></div>
+  <div id="tbar" hidden><i></i><span id="tsec"></span></div>
   <div id="me"><div class="who" id="who"></div><div id="hand"></div></div>
 </div>
 <div id="layer"></div>
+<div id="chat" hidden>
+  <div class="ch"><h2>Bate-papo</h2><button class="btn ghost" id="chatClose" style="min-height:40px">Fechar</button></div>
+  <div id="chatlist"></div>
+  <form class="chatrow" id="chatform"><input id="chatin" maxlength="200" autocomplete="off" placeholder="Escreva uma mensagem" aria-label="Mensagem"><button class="btn" type="submit">Enviar</button></form>
+</div>
 
 <script>
 (function(){
 'use strict';
-var TARGET=200;
+var TARGET=200,TURN_MS=20000,BOT_MS=1800,PASS_MS=1600,TURN=null,ME=null,CHAT=[],unread=0,chatOpen=false;
 var SCORE={fechou:40,chorou:80,buxa:30,buxaDobrada:60,lasquinePreso:60,lasquineSolto:30};
 var $=function(id){return document.getElementById(id)};
 var CFG={names:['Você','Robô Direita','Parceiro Robô','Robô Esquerda'],human:[true,false,false,false]};
@@ -141,9 +189,9 @@ function pips(n){
   var m={0:[],1:[4],2:[0,8],3:[0,4,8],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,2,3,5,6,8]};
   return m[n].map(function(i){return p[i]});
 }
-function svgPiece(a,b,vert,w,h,extra){
-  var W=vert?50:100,H=vert?100:50,s='<svg class="pc '+(extra||'')+'" viewBox="0 0 '+W+' '+H+'" style="width:'+w+'px;height:'+h+'px" aria-hidden="true">';
-  s+='<rect class="pc-body" x="1" y="1" width="'+(W-2)+'" height="'+(H-2)+'" rx="7"/>';
+function svgPiece(a,b,vert,w,h,extra,css){
+  var W=vert?50:100,H=vert?100:50,s='<svg class="pc '+(extra||'')+'" viewBox="0 0 '+W+' '+H+'" style="width:'+w+'px;height:'+h+'px;'+(css||'')+'" aria-hidden="true">';
+  s+='<rect class="pc-body" x="1" y="1" width="'+(W-2)+'" height="'+(H-2)+'" rx="5"/>';
   s+=vert?'<line class="pc-div" x1="7" y1="50" x2="43" y2="50"/>':'<line class="pc-div" x1="50" y1="7" x2="50" y2="43"/>';
   [[a,0,0],[b,vert?0:50,vert?50:0]].forEach(function(h2){
     pips(h2[0]).forEach(function(q){s+='<circle class="pc-pip" cx="'+(q[0]+h2[1])+'" cy="'+(q[1]+h2[2])+'" r="4.6"/>'});
@@ -201,7 +249,7 @@ function resText(r){
 /* ---------- partida ---------- */
 function newGame(){
   G={scores:[0,0],hands:[[],[],[],[]],chain:[],turn:0,passed:[[],[],[],[]],passes:0,
-     handNo:0,res:null,first:true,nextStarter:0,must:null,handOver:false,over:false,viewer:0,msg:'',token:0,cover:false,lastPlayer:0,lastPiece:null};
+     gameId:Date.now().toString(36)+Math.random().toString(36).slice(2,6),handNo:0,res:null,first:true,nextStarter:0,must:null,handOver:false,over:false,viewer:0,msg:'',token:0,cover:false,lastPlayer:0,lastPiece:null};
   for(var i=0;i<4;i++)G.passed[i]=[];
   newHand();
 }
@@ -225,31 +273,66 @@ function newHand(){
   step();
 }
 function step(remote){
+  disarmTurn();
   if(!G||G.handOver||G.over)return;
   var s=G.turn,tok=G.token;
   if(ONLINE&&!remote)pushState();
   render();
   var moves=legalMoves(s);
+  function autoPass(){
+    G.msg=nm(s)+' não tem peça e passa.';render();
+    setTimeout(function(){if(G&&G.token===tok&&G.turn===s&&!G.handOver)doPass(s)},PASS_MS);
+  }
+  function bot(){
+    armTurn(s,tok,false);
+    setTimeout(function(){if(G&&G.token===tok&&G.turn===s&&!G.handOver&&!G.over)botPlay(s)},BOT_MS);
+  }
   if(ONLINE){
     if(s===MYSEAT){
-      if(!moves.length){
-        G.msg=nm(s)+' não tem peça e passa.';render();
-        setTimeout(function(){if(G&&G.token===tok&&G.turn===s&&!G.handOver)doPass(s)},1100);
-      }
-    }else if(!CFG.human[s]&&IAMHOST){
-      setTimeout(function(){if(G&&G.token===tok&&G.turn===s&&!G.handOver&&!G.over)botPlay(s)},800);
-    }
+      if(!moves.length)autoPass();else armTurn(s,tok,true);
+    }else if(!CFG.human[s]){
+      if(IAMHOST)bot();else armTurn(s,tok,false);
+    }else armTurn(s,tok,false);
     return;
   }
   if(CFG.human[s]){
     if(humanCount()>1&&G.viewer!==s){showCover(s);return}
-    if(!moves.length){
-      G.msg=nm(s)+' não tem peça e passa.';render();
-      setTimeout(function(){if(G&&G.token===tok&&G.turn===s&&!G.handOver)doPass(s)},1100);
-    }
-  }else{
-    setTimeout(function(){if(G&&G.token===tok&&G.turn===s&&!G.handOver&&!G.over)botPlay(s)},800);
-  }
+    if(!moves.length)autoPass();else armTurn(s,tok,true);
+  }else bot();
+}
+/* Relógio da jogada: 20 s. Quem deve jogar tem a pedra lançada sozinha (escolha do robô) se o tempo acabar.
+   No online o anfitrião cobre quem sumiu, 3 s depois do prazo. */
+function armTurn(s,tok,mine){
+  var grace=mine?0:(ONLINE&&IAMHOST&&CFG.human[s]?3000:-1);
+  TURN={s:s,tok:tok,end:Date.now()+TURN_MS,fired:false,grace:grace,timer:null};
+  var t=TURN;
+  t.timer=setInterval(function(){
+    if(!G||TURN!==t||G.token!==t.tok||G.handOver){disarmTurn();return}
+    var left=t.end-Date.now();
+    drawTurn(left);
+    if(left<=-Math.max(t.grace,0)&&t.grace>=0&&!t.fired){t.fired=true;autoPlay(t.s)}
+  },200);
+  drawTurn(TURN_MS);
+}
+function disarmTurn(){
+  if(TURN&&TURN.timer)clearInterval(TURN.timer);
+  TURN=null;
+  var b=$('tbar');if(b)b.hidden=true;
+}
+function drawTurn(left){
+  var b=$('tbar');if(!b)return;
+  var l=Math.max(0,left);
+  b.hidden=false;
+  b.className=l<5000?'low':'';
+  b.firstChild.style.width=(l/TURN_MS*100)+'%';
+  $('tsec').textContent=Math.ceil(l/1000)+' s';
+}
+function autoPlay(s){
+  if(!G||G.handOver||G.turn!==s)return;
+  var moves=legalMoves(s);
+  if(!moves.length)return;
+  closeLayer();
+  doMove(s,botChoose(s,moves),true);
 }
 function botPlay(s){
   var moves=legalMoves(s);
@@ -292,13 +375,13 @@ function orient(p,side,e){
   if(side==='L')return p.b===e[0]?{a:p.a,b:p.b}:{a:p.b,b:p.a};
   return p.a===e[1]?{a:p.a,b:p.b}:{a:p.b,b:p.a};
 }
-function doMove(s,m){
+function doMove(s,m,auto){
   var e=ends(),p=m.p,np=orient(p,m.side,e);
   var info=e?batida(p,e[0],e[1]):null;
   G.hands[s]=G.hands[s].filter(function(x){return x!==p});
   if(m.side==='L')G.chain.unshift(np);else G.chain.push(np);
   G.must=null;G.first=false;G.passes=0;G.lastPlayer=s;G.lastPiece=np;
-  G.msg=nm(s)+' jogou '+p.a+'|'+p.b+'.';
+  G.msg=nm(s)+' jogou '+p.a+'|'+p.b+(auto?' (tempo esgotado, jogada automática).':'.');
   if(!G.hands[s].length){endHand({type:'batida',seat:s,info:info});return}
   if(isClosed()){endHand({type:'fechou',seat:s});return}
   G.turn=(s+1)%4;
@@ -337,7 +420,7 @@ function endHand(r){
   G.res=res;
   if(ONLINE){shownHand=G.handNo;pushState()}
   render();
-  setTimeout(function(){showResult(res)},700);
+  setTimeout(function(){showResult(res)},2200);
 }
 
 /* ---------- interface ---------- */
@@ -360,6 +443,7 @@ function render(){
   var e=ends();
   $('ends').innerHTML=e?'<span>Pontas</span><b>'+e[0]+'</b><span>e</span><b>'+e[1]+'</b>':'';
   renderBoard();
+  $('btnChat').hidden=!chatEnabled();
   var myTurn=!G.handOver&&G.turn===v&&CFG.human[v]&&!G.cover;
   var st=$('status');
   st.className=myTurn?'you':'';
@@ -373,28 +457,36 @@ function render(){
     return '<button class="hp '+(myTurn?(ok?'ok':'no'):'')+'" data-i="'+i+'" '+(ok?'':'disabled')+' aria-label="Peça '+p.a+' e '+p.b+'">'+svgPiece(p.a,p.b,true,44,88)+'</button>';
   }).join('');
 }
+/* Corrente em serpentina com posições exatas: cada linha começa onde a anterior terminou, então as pedras ficam coladas. */
 function renderBoard(){
   var el=$('board');
   if(!G.chain.length){el.innerHTML='<div class="wait">Mesa vazia. Quem começa joga a primeira peça.</div>';return}
-  var W=el.clientWidth-12,u=Math.max(16,Math.min(30,Math.floor(W/13)));
-  var rows=[[]],cur=0;
+  var W=Math.floor(el.clientWidth-12),u=Math.max(16,Math.min(30,Math.floor(W/13))),gap=2;
+  var rows=[{dir:1,pcs:[],dbl:false}],x=0,dir=1;
   G.chain.forEach(function(p){
-    var w=p.a===p.b?u:2*u;
-    if(cur+w>W&&rows[rows.length-1].length){rows.push([]);cur=0}
-    rows[rows.length-1].push(p);cur+=w;
+    var d=p.a===p.b,w=d?u:2*u,row=rows[rows.length-1];
+    var fits=dir===1?x+w<=W:x-w>=0;
+    if(!fits&&row.pcs.length){dir=-dir;row={dir:dir,pcs:[],dbl:false};rows.push(row)}
+    var left;
+    if(dir===1){left=x;x+=w}else{x-=w;left=Math.max(0,x)}
+    row.pcs.push({p:p,left:left,w:w,d:d,rev:dir===-1});
+    if(d)row.dbl=true;
   });
-  var html='';
-  rows.forEach(function(r,ri){
-    var rev=ri%2===1,single=rows.length===1;
-    html+='<div class="row'+(rev?' rev':'')+(single?' mid':'')+'" style="height:'+(2*u)+'px">';
-    r.forEach(function(p){
-      var d=p.a===p.b;
-      if(d)html+=svgPiece(p.a,p.b,true,u,2*u);
-      else html+=svgPiece(rev?p.b:p.a,rev?p.a:p.b,false,2*u,u);
+  var shift=0;
+  if(rows.length===1){var pcs=rows[0].pcs;shift=Math.floor((W-(pcs[pcs.length-1].left+pcs[pcs.length-1].w-pcs[0].left))/2)-pcs[0].left}
+  var y=0,html='',lp=G.lastPiece;
+  rows.forEach(function(r){
+    var rh=r.dbl?2*u:u;
+    r.pcs.forEach(function(q){
+      var h=q.d?2*u:u,css='left:'+(q.left+shift)+'px;top:'+(y+(rh-h)/2)+'px;';
+      var isLast=lp&&((q.p.a===lp.a&&q.p.b===lp.b)||(q.p.a===lp.b&&q.p.b===lp.a));
+      var cls=isLast?'last':'';
+      if(q.d)html+=svgPiece(q.p.a,q.p.b,true,u,2*u,cls,css);
+      else html+=svgPiece(q.rev?q.p.b:q.p.a,q.rev?q.p.a:q.p.b,false,2*u,u,cls,css);
     });
-    html+='</div>';
+    y+=rh+gap;
   });
-  el.innerHTML=html;
+  el.innerHTML='<div class="snake" style="width:'+W+'px;height:'+(y-gap)+'px">'+html+'</div>';
 }
 function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 
@@ -480,7 +572,7 @@ function showSetup(){
   }).join('');
   openLayer('<div class="card"><h2>Dominó do Meladinha</h2><p>Duplas, até 4 jogadores. Vence a dupla que fizer '+TARGET+' pontos primeiro. Com mais de um humano, o celular passa de mão em mão.</p>'+rows
     +'<button class="btn" id="go">Começar</button><button class="btn ghost" id="onl">Jogar online (cada um no seu celular)</button><button class="btn ghost" id="rl">Ver pontuação</button></div>');
-  $('onl').onclick=showOnline;
+  $('onl').onclick=openOnline;
   document.querySelectorAll('.seg').forEach(function(sg){
     sg.addEventListener('click',function(ev){
       var b=ev.target.closest('button');if(!b||b.disabled)return;
@@ -514,36 +606,55 @@ function localUid(){
   catch(e){return 'u_'+Math.random().toString(36).slice(2)}
 }
 /* Fora do claude.ai o banco é um servidor próprio por WebSocket (pasta domino-online), com a mesma interface doc/get/set/update/delete/onSnapshot. */
+function netDB(){if(!DB){DB=makeWsDB();DB.onchat=onChat}return DB}
+function getToken(){try{return localStorage.getItem('domino-token')||''}catch(e){return ''}}
+function setToken(t){try{if(t)localStorage.setItem('domino-token',t);else localStorage.removeItem('domino-token')}catch(e){}}
 function makeWsDB(){
-  var url=(location.protocol==='https:'?'wss://':'ws://')+location.host,sock=null,open=false,queue=[],pending={},nid=1,subs={};
+  var url=(location.protocol==='https:'?'wss://':'ws://')+location.host,sock=null,open=false,queue=[],pending={},nid=1,subs={},closed=false,api;
   function tx(o){var s=JSON.stringify(o);if(open)sock.send(s);else queue.push(s)}
   function rpc(o){return new Promise(function(res,rej){var id=nid++;pending[id]={res:res,rej:rej};o.id=id;tx(o)})}
   function snap(exists,doc){return {exists:exists,data:function(){return doc||undefined}}}
   function connect(){
     sock=new WebSocket(url);
-    sock.onopen=function(){open=true;queue.splice(0).forEach(function(m){sock.send(m)});Object.keys(subs).forEach(function(c){if(subs[c].length)sock.send(JSON.stringify({t:'sub',code:c}))})};
+    sock.onopen=function(){
+      open=true;
+      var tk=getToken();
+      if(tk&&ME)sock.send(JSON.stringify({t:'auth',token:tk}));
+      queue.splice(0).forEach(function(m){sock.send(m)});
+      Object.keys(subs).forEach(function(c){if(subs[c].length)sock.send(JSON.stringify({t:'sub',code:c}))});
+    };
     sock.onmessage=function(ev){
       var m;try{m=JSON.parse(ev.data)}catch(e){return}
-      if(m.t==='got'&&pending[m.id]){pending[m.id].res(snap(m.exists,m.doc));delete pending[m.id]}
-      else if(m.t==='ack'&&pending[m.id]){if(m.error)pending[m.id].rej({code:m.error,message:m.error});else pending[m.id].res();delete pending[m.id]}
+      if(m.id&&pending[m.id]){
+        var p=pending[m.id];delete pending[m.id];
+        if(m.t==='got')p.res(snap(m.exists,m.doc));
+        else if(m.error)p.rej({code:m.error,message:m.error});
+        else p.res(m);
+      }
       else if(m.t==='doc'&&subs[m.code])subs[m.code].slice().forEach(function(f){f(snap(m.exists,m.doc))});
+      else if(m.t==='chat'||m.t==='chathist'){if(api.onchat)api.onchat(m)}
     };
-    sock.onclose=function(){open=false;setTimeout(connect,2000)};
+    sock.onclose=function(){open=false;if(!closed)setTimeout(connect,2000)};
   }
   connect();
-  return {doc:function(path){
-    var code=path.split('/')[1];
-    return {
-      get:function(){return rpc({t:'get',code:code})},
-      set:function(d){return rpc({t:'set',code:code,doc:d})},
-      update:function(d){return rpc({t:'update',code:code,data:d})},
-      delete:function(){return rpc({t:'delete',code:code})},
-      onSnapshot:function(next){
-        (subs[code]=subs[code]||[]).push(next);tx({t:'sub',code:code});
-        return function(){subs[code]=(subs[code]||[]).filter(function(f){return f!==next});if(!subs[code].length)tx({t:'unsub',code:code})};
-      }
-    };
-  }};
+  api={
+    raw:rpc,send:tx,
+    close:function(){closed=true;try{sock.close()}catch(e){}},
+    doc:function(path){
+      var code=path.split('/')[1];
+      return {
+        get:function(){return rpc({t:'get',code:code})},
+        set:function(d){return rpc({t:'set',code:code,doc:d})},
+        update:function(d){return rpc({t:'update',code:code,data:d})},
+        delete:function(){return rpc({t:'delete',code:code})},
+        onSnapshot:function(next){
+          (subs[code]=subs[code]||[]).push(next);tx({t:'sub',code:code});
+          return function(){subs[code]=(subs[code]||[]).filter(function(f){return f!==next});if(!subs[code].length)tx({t:'unsub',code:code})};
+        }
+      };
+    }
+  };
+  return api;
 }
 async function ensureNet(){
   if(DB&&UID)return true;
@@ -553,11 +664,105 @@ async function ensureNet(){
       var u=await window.claude.use('user');
       if(u)UID=await u.id();
     }else if(/^https?:$/.test(location.protocol)){
-      DB=makeWsDB();UID=localUid();
+      netDB();
+      if(ME)UID=ME.id;
     }
   }catch(e){}
   return !!(DB&&UID);
 }
+/* ---------- conta: apelido e senha ---------- */
+function applyAuth(r){
+  ME={id:r.uid,nick:r.nick,wins:r.wins||0,games:r.games||0};UID=ME.id;MYNAME=ME.nick;
+  if(r.token)setToken(r.token);
+}
+async function autoLogin(){
+  netDB();
+  var tk=getToken();if(!tk)return false;
+  try{var r=await DB.raw({t:'auth',token:tk});applyAuth(r);return true}
+  catch(e){if(e&&e.code==='auth')setToken('');return false}
+}
+async function openOnline(){
+  if(viaClaude()){showOnline();return}
+  if(!/^https?:$/.test(location.protocol)){openLayer('<div class="card"><h2>Jogar online</h2><p>O jogo online só funciona pelo endereço do servidor, não por arquivo aberto no aparelho.</p><button class="btn" id="ob">Voltar</button></div>');$('ob').onclick=showSetup;return}
+  openLayer('<div class="card"><h2>Jogar online</h2><p class="small">Conectando...</p></div>');
+  if(!ME&&!(await autoLogin())){showLogin();return}
+  await ensureNet();
+  showOnline();
+}
+function showLogin(msg){
+  openLayer('<div class="card"><h2>Entrar</h2><p>Use um apelido e uma senha. Se ainda não tem conta, crie uma na hora.</p>'
+    +'<div class="seat"><label>Apelido</label><input id="lu" maxlength="16" autocomplete="username" autocapitalize="none" aria-label="Apelido"></div>'
+    +'<div class="seat"><label>Senha</label><input id="lp" type="password" maxlength="64" autocomplete="current-password" aria-label="Senha"></div>'
+    +'<p class="err" id="lerr">'+esc(msg||'')+'</p>'
+    +'<div class="btns"><button class="btn" id="lgo">Entrar</button><button class="btn ghost" id="lnew">Criar conta</button></div>'
+    +'<button class="btn ghost" id="lback">Voltar</button></div>');
+  async function go(kind){
+    var nick=$('lu').value.trim(),pass=$('lp').value;
+    $('lerr').textContent='Aguarde...';
+    try{
+      netDB();
+      var r=await DB.raw({t:kind,nick:nick,pass:pass});
+      applyAuth(r);await ensureNet();showOnline();
+    }catch(e){$('lerr').textContent=authError(e&&e.code)}
+  }
+  $('lgo').onclick=function(){go('login')};
+  $('lnew').onclick=function(){go('register')};
+  $('lp').addEventListener('keydown',function(ev){if(ev.key==='Enter')go('login')});
+  $('lback').onclick=showSetup;
+}
+function authError(c){
+  return {nick_invalido:'O apelido precisa ter de 3 a 16 letras, números, _ ou -.',senha_curta:'A senha precisa ter pelo menos 4 caracteres.',
+    nick_em_uso:'Esse apelido já existe. Escolha outro.',login_invalido:'Apelido ou senha incorretos.',muitas_tentativas:'Muitas tentativas. Espere alguns minutos.',
+    auth:'Sessão expirada. Entre de novo.'}[c]||'Não foi possível conectar. Tente de novo.';
+}
+async function showRanking(){
+  openLayer('<div class="card"><h2>Ranking</h2><p class="small">Carregando...</p></div>');
+  var list=[];
+  try{var r=await DB.raw({t:'ranking'});list=r.list||[]}catch(e){}
+  var rows=list.map(function(u,i){return '<tr'+(ME&&u.nick===ME.nick?' class="me2"':'')+'><td>'+(i+1)+'</td><td>'+esc(u.nick)+'</td><td>'+u.wins+'</td><td>'+u.games+'</td></tr>'}).join('');
+  openLayer('<div class="card"><h2>Ranking</h2>'+(rows?'<table class="rank"><tr><th>#</th><th>Jogador</th><th>Vitórias</th><th>Jogos</th></tr>'+rows+'</table>':'<p>Ninguém pontuou ainda. Só contam partidas online com pelo menos 2 pessoas.</p>')
+    +'<button class="btn" id="rb">Voltar</button></div>');
+  $('rb').onclick=showOnline;
+}
+function logout(){
+  setToken('');ME=null;UID=null;MYNAME='';
+  if(DB&&DB.close)DB.close();DB=null;
+  showSetup();
+}
+/* ---------- chat da sala ---------- */
+function chatLine(m){
+  var mine=ME&&m.n===ME.nick;
+  return '<div class="msg'+(mine?' mine':'')+'"><small>'+esc(m.n)+'</small>'+esc(m.x)+'</div>';
+}
+function onChat(m){
+  if(m.t==='chathist'){CHAT=m.list||[];unread=0}
+  else{
+    CHAT.push(m.msg);if(CHAT.length>100)CHAT.shift();
+    if(chatOpen){var l=$('chatlist'),ph=l.querySelector('p.small');if(ph)ph.remove();l.insertAdjacentHTML('beforeend',chatLine(m.msg));l.scrollTop=l.scrollHeight}
+    else if(!ME||m.msg.n!==ME.nick)unread++;
+  }
+  drawChatBadge();
+}
+function drawChatBadge(){
+  var b=$('cbadge');b.textContent=unread>9?'9+':unread;b.hidden=!unread;
+  var lb=$('ochat');if(lb)lb.textContent='Bate-papo'+(unread?' ('+unread+')':'');
+}
+function openChat(){
+  chatOpen=true;unread=0;drawChatBadge();
+  $('chat').hidden=false;
+  var l=$('chatlist');l.innerHTML=CHAT.map(chatLine).join('')||'<p class="small">Nenhuma mensagem ainda.</p>';
+  l.scrollTop=l.scrollHeight;
+  $('chatin').focus();
+}
+function closeChat(){chatOpen=false;$('chat').hidden=true}
+$('btnChat').onclick=openChat;
+$('chatClose').onclick=closeChat;
+$('chatform').addEventListener('submit',function(ev){
+  ev.preventDefault();
+  var t=$('chatin').value.trim();if(!t||!ROOMREF||!DB||!DB.send)return;
+  DB.send({t:'chat',code:ROOM.code,text:t});$('chatin').value='';
+});
+function chatEnabled(){return !viaClaude()&&!!ROOMREF&&!!DB&&!!DB.send}
 function writeDoc(doc){
   wnext=doc;if(wbusy)return;wbusy=true;
   (function loop(){
@@ -573,7 +778,7 @@ function pushState(){
   var g=clone({hands:G.hands,chain:G.chain,turn:G.turn,scores:G.scores,passed:G.passed,passes:G.passes,first:G.first,
     nextStarter:G.nextStarter,must:G.must,handOver:G.handOver,over:G.over,lastPlayer:G.lastPlayer,lastPiece:G.lastPiece,
     msg:G.msg,res:G.res||null,handNo:G.handNo});
-  var doc={rev:REV,phase:'play',host:ROOM.host,code:ROOM.code,seats:ROOM.seats,game:g};
+  var doc={rev:REV,phase:'play',host:ROOM.host,code:ROOM.code,gameId:G.gameId,seats:ROOM.seats,game:g};
   ROOM=doc;writeDoc(doc);
 }
 function mySeatIn(seats){for(var s=0;s<4;s++)if(seats[s]&&seats[s].uid&&seats[s].uid===UID)return s;return -1}
@@ -582,12 +787,12 @@ function setupFromSeats(seats){
 }
 function adopt(doc){
   var prevOver=G?G.handOver:false,first=!G;
-  var g=doc.game;g.token=(G?G.token:0)+1;g.cover=false;g.viewer=MYSEAT;
+  var g=doc.game;g.token=(G?G.token:0)+1;g.cover=false;g.viewer=MYSEAT;g.gameId=doc.gameId;
   if(first)closeLayer();
   G=g;ROOM=doc;REV=doc.rev;
   render();
   if(G.handOver){
-    if(shownHand!==G.handNo){shownHand=G.handNo;setTimeout(function(){if(G&&G.handOver)showResult(G.res)},700)}
+    if(shownHand!==G.handNo){shownHand=G.handNo;setTimeout(function(){if(G&&G.handOver)showResult(G.res)},2200)}
   }else{
     if(prevOver)closeLayer();
     shownHand=-1;step(true);
@@ -614,6 +819,7 @@ function onRoom(snap){
 }
 function subscribe(){
   if(UNSUB)UNSUB();
+  CHAT=[];unread=0;drawChatBadge();
   UNSUB=ROOMREF.onSnapshot(onRoom,function(e){console.error(e);if(G){G.msg='Conexão com a sala perdida.';render()}else netMsg('Conexão com a sala perdida.')});
 }
 function enterOnline(seat,host){if(!SAVED)SAVED=clone(CFG);ONLINE=true;MYSEAT=seat;IAMHOST=host}
@@ -621,6 +827,7 @@ function leaveRoom(){
   if(UNSUB){UNSUB();UNSUB=null}
   if(IAMHOST&&ROOMREF){try{ROOMREF.delete()}catch(e){}}
   ROOMREF=null;ROOM=null;ONLINE=false;IAMHOST=false;G=null;REV=0;shownHand=-1;wnext=null;
+  disarmTurn();closeChat();$('btnChat').hidden=true;CHAT=[];unread=0;
   if(SAVED){CFG.names=SAVED.names;CFG.human=SAVED.human;SAVED=null}
   ['opps','ends','board','status','who','hand','tA','tB'].forEach(function(id){$(id).innerHTML=''});
 }
@@ -664,7 +871,8 @@ function renderLobby(){
   var foot=IAMHOST?'<button class="btn" id="os"'+(open?' disabled':'')+'>'+(open?'Falta preencher as vagas':'Começar o jogo')+'</button>'
     :(me<0?'<p class="small">Escolha uma vaga aberta.</p>':'<p class="small">Você está dentro. Aguardando o anfitrião começar.</p>');
   openLayer('<div class="card"><h2>Sala '+esc(ROOM.code)+'</h2><p>Quem vai entrar abre este mesmo jogo, toca em Jogar online e digita o código <b>'+esc(ROOM.code)+'</b>.</p>'
-    +'<div class="hands">'+body+'</div>'+foot+'<button class="btn ghost" id="ox">Sair da sala</button></div>');
+    +'<div class="hands">'+body+'</div>'+foot+(chatEnabled()?'<button class="btn ghost" id="ochat">Bate-papo'+(unread?' ('+unread+')':'')+'</button>':'')+'<button class="btn ghost" id="ox">Sair da sala</button></div>');
+  if($('ochat'))$('ochat').onclick=openChat;
   document.querySelectorAll('#layer .seg').forEach(function(sg){
     sg.addEventListener('click',function(ev){
       var b=ev.target.closest('button');if(!b)return;
@@ -691,17 +899,24 @@ function takeover(s){
 }
 function showOnline(){
   openLayer('<div class="card"><h2>Jogar online</h2><p>Cada um joga no seu celular. '+(viaClaude()?'Quem entrar precisa estar logado no claude.ai e ter acesso de colaborador a este jogo.':'Crie a sala e passe o código de 4 letras para os outros jogadores.')+'</p>'
-    +'<div class="seat"><label>Seu nome</label><input id="on" value="'+esc(CFG.names[0])+'" maxlength="14" aria-label="Seu nome"></div>'
+    +(ME?'<div class="me"><strong>'+esc(ME.nick)+'</strong><span id="mest">'+ME.wins+' vitórias · '+ME.games+' jogos</span></div>'
+        :'<div class="seat"><label>Seu nome</label><input id="on" value="'+esc(CFG.names[0])+'" maxlength="14" aria-label="Seu nome"></div>')
     +'<button class="btn" id="oc">Criar sala</button>'
     +'<div class="seat"><label>Código da sala</label><input id="oj" maxlength="4" autocapitalize="characters" placeholder="ABCD" style="text-transform:uppercase" aria-label="Código da sala"></div>'
-    +'<button class="btn" id="oe">Entrar na sala</button><p class="small" id="omsg"></p><button class="btn ghost" id="ob">Voltar</button></div>');
-  $('oc').onclick=function(){netMsg('Criando a sala...');createRoom($('on').value.trim()||'Jogador')};
-  $('oe').onclick=function(){netMsg('Entrando...');joinRoom($('oj').value,$('on').value.trim()||'Jogador')};
+    +'<button class="btn" id="oe">Entrar na sala</button><p class="small" id="omsg"></p>'
+    +(ME?'<div class="btns"><button class="btn ghost" id="orank">Ranking</button><button class="btn ghost" id="oout">Sair da conta</button></div>':'')
+    +'<button class="btn ghost" id="ob">Voltar</button></div>');
+  function nameOf(){return ME?ME.nick:($('on').value.trim()||'Jogador')}
+  $('oc').onclick=function(){netMsg('Criando a sala...');createRoom(nameOf())};
+  $('oe').onclick=function(){netMsg('Entrando...');joinRoom($('oj').value,nameOf())};
   $('ob').onclick=showSetup;
+  if(ME){
+    $('orank').onclick=showRanking;
+    $('oout').onclick=logout;
+    DB.raw({t:'me'}).then(function(r){ME.wins=r.wins;ME.games=r.games;var el=$('mest');if(el)el.textContent=r.wins+' vitórias · '+r.games+' jogos'}).catch(function(){});
+  }
 }
 
-/* modo de teste: ?auto=1 não existe em artefato; exposto só para depuração */
-window.__domino={get G(){return G},CFG:CFG,batida:batida,legalMoves:legalMoves,newGame:newGame};
 showSetup();
 })();
 </script>
