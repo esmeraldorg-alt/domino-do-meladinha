@@ -77,7 +77,7 @@ function fail(ip) {
 }
 function publicUser(u) { return { id: u.id, nick: u.nick, wins: u.wins || 0, losses: u.losses || 0 }; }
 // A resposta usa "uid" porque "id" já é o número do pedido.
-function userOut(u, token) { return { uid: u.id, nick: u.nick, wins: u.wins || 0, losses: u.losses || 0, token }; }
+function userOut(u, token) { return { uid: u.id, nick: u.nick, wins: u.wins || 0, losses: u.losses || 0, abandons: u.abandons || 0, token }; }
 function newToken(u) { return sign({ id: u.id, exp: Date.now() + TOKEN_DAYS * 86400000 }); }
 
 async function handleAuth(ws, m, reply) {
@@ -154,7 +154,22 @@ wss.on('connection', (ws, req) => {
       if (m && m.id) send(ws, { id: m.id, t: 'ack', error: 'erro' });
     });
   });
-  ws.on('close', () => { ws.codes.forEach((c) => { const r = rooms.get(c); if (r) r.subs.delete(ws); }); });
+  ws.on('close', () => {
+    const uid = ws.user && ws.user.id;
+    ws.codes.forEach((c) => {
+      const r = rooms.get(c); if (!r) return;
+      r.subs.delete(ws);
+      // Sumiu sem avisar: espera um tempo para a pessoa voltar; se não voltar, um robô assume.
+      if (uid) {
+        setTimeout(() => {
+          const rr = rooms.get(c);
+          if (!rr || !rr.doc) return;
+          if ([...rr.subs].some((w) => w.user && w.user.id === uid)) return;
+          convertSeat(rr, c, uid);
+        }, GRACE_MS);
+      }
+    });
+  });
 });
 
 async function handle(ws, m) {
@@ -178,6 +193,14 @@ async function handle(ws, m) {
     });
     list.sort((a, b) => b.touched - a.touched);
     return reply({ list: list.slice(0, 20).map(({ touched, ...rest }) => rest) });
+  }
+  if (m.t === 'abandon') {
+    // Saiu de uma partida local (contra robôs ou no mesmo celular) antes de terminar.
+    const gameId = String(m.gameId || '').slice(0, 40);
+    if (!gameId) return reply({ error: 'invalid_argument' });
+    await store.addAbandon(ws.user.id, 'AL' + gameId);
+    const u = await store.byId(ws.user.id);
+    return reply(u ? userOut(u) : { error: 'auth' });
   }
   if (m.t === 'result') {
     // Partida local (contra robôs ou no mesmo celular) que chegou ao fim: vale para quem está com a conta.
@@ -219,6 +242,10 @@ async function handle(ws, m) {
         if (!seated) return reply({ error: 'sem_lugar' });
         if (cur.phase === 'play' && m.doc.phase === 'play' && m.doc.rev < cur.rev) return reply({});
         m.doc.host = cur.host;
+        // Cadeiras já entregues a um robô porque a pessoa saiu não voltam a ser humanas por um estado atrasado.
+        for (const s of Object.keys(cur.seats || {})) {
+          if (cur.seats[s] && cur.seats[s].left && m.doc.seats) m.doc.seats[s] = cur.seats[s];
+        }
       }
       room.doc = m.doc; room.touched = Date.now();
       broadcast(code, room); reply({});
@@ -247,6 +274,10 @@ async function handle(ws, m) {
       if (room && room.doc && room.doc.host === ws.user.id) { room.doc = null; broadcast(code, room); }
       reply({});
       break;
+    case 'leave':
+      if (room) { convertSeat(room, code, ws.user.id); room.subs.delete(ws); }
+      ws.codes.delete(code);
+      break;
     case 'chat': {
       if (!room || !room.subs.has(ws)) return;
       const now = Date.now();
@@ -263,6 +294,36 @@ async function handle(ws, m) {
       break;
     }
   }
+}
+
+/* ---------- saída de jogador ---------- */
+// Quem sai de uma partida em andamento vira um robô na mesma cadeira e ganha um abandono.
+// No lobby a vaga volta a ficar livre. Se o anfitrião sai, a mesa passa para outra pessoa; sem ninguém, a sala fecha.
+const GRACE_MS = Number(process.env.GRACE_MS) || 30000;
+function convertSeat(room, code, uid) {
+  const d = room.doc;
+  if (!d || !d.seats) return false;
+  const k = Object.keys(d.seats).find((s) => d.seats[s] && d.seats[s].type === 'human' && d.seats[s].uid === uid);
+  if (k === undefined) return false;
+  const nick = d.seats[k].name;
+  if (d.phase === 'lobby') {
+    if (d.host === uid) { room.doc = null; broadcast(code, room); return true; }
+    d.seats[k] = { type: 'open', uid: null, name: '' };
+  } else {
+    const aindaJogando = !(d.game && d.game.over);
+    d.seats[k] = { type: 'bot', uid: null, name: nick + ' (robô)', left: true };
+    if (aindaJogando && d.gameId) store.addAbandon(uid, 'A' + d.gameId).catch((e) => console.error('abandono:', e.message));
+    if (d.host === uid) {
+      const next = Object.values(d.seats).find((x) => x && x.type === 'human' && x.uid);
+      if (!next) { room.doc = null; broadcast(code, room); return true; }
+      d.host = next.uid;
+    }
+    d.rev = (d.rev || 0) + 1;
+    if (d.game) d.game.msg = nick + ' saiu e um robô assumiu o lugar.';
+  }
+  room.touched = Date.now();
+  broadcast(code, room);
+  return true;
 }
 
 // Mantém a conexão viva atrás do proxy do Render e remove salas esquecidas.

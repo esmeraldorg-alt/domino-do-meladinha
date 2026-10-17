@@ -44,11 +44,19 @@ function fileStore() {
       u.wins = (u.wins || 0) + wins; u.losses = (u.losses || 0) + losses; u.games = (u.games || 0) + games;
       save(); return true;
     },
+    // Abandono: saiu de uma partida que não tinha terminado. Conta uma vez por partida (chave "A" + gameId).
+    async addAbandon(id, key) {
+      const u = db.users[id]; if (!u) return false;
+      u.recent = (u.recent || []).slice(-30);
+      if (u.recent.includes(key)) return false;
+      u.recent.push(key); u.abandons = (u.abandons || 0) + 1;
+      save(); return true;
+    },
     async top(n) {
       return Object.values(db.users)
-        .filter((u) => (u.games || 0) > 0)
-        .sort((a, b) => (b.wins || 0) - (a.wins || 0) || (a.losses || 0) - (b.losses || 0) || a.nick.localeCompare(b.nick))
-        .slice(0, n).map((u) => ({ nick: u.nick, wins: u.wins || 0, losses: u.losses || 0 }));
+        .filter((u) => (u.games || 0) > 0 || (u.abandons || 0) > 0)
+        .sort((a, b) => (b.wins || 0) - (a.wins || 0) || (a.losses || 0) - (b.losses || 0) || (a.abandons || 0) - (b.abandons || 0) || a.nick.localeCompare(b.nick))
+        .slice(0, n).map((u) => ({ nick: u.nick, wins: u.wins || 0, losses: u.losses || 0, abandons: u.abandons || 0 }));
     },
   };
 }
@@ -99,10 +107,20 @@ function mongoStore(uri) {
       );
       return r.modifiedCount > 0;
     },
+    // Abandono: saiu de uma partida que não tinha terminado. Conta uma vez por partida (chave "A" + gameId).
+    async addAbandon(id, key) {
+      await ready;
+      const r = await users.updateOne(
+        { id, recent: { $ne: key } },
+        { $inc: { abandons: 1 }, $push: { recent: { $each: [key], $slice: -30 } } },
+      );
+      return r.modifiedCount > 0;
+    },
     async top(n) {
       await ready;
-      const list = await users.find({ games: { $gt: 0 } }).sort({ wins: -1, losses: 1, nick: 1 }).limit(n).toArray();
-      return list.map((u) => ({ nick: u.nick, wins: u.wins || 0, losses: u.losses || 0 }));
+      const list = await users.find({ $or: [{ games: { $gt: 0 } }, { abandons: { $gt: 0 } }] })
+        .sort({ wins: -1, losses: 1, abandons: 1, nick: 1 }).limit(n).toArray();
+      return list.map((u) => ({ nick: u.nick, wins: u.wins || 0, losses: u.losses || 0, abandons: u.abandons || 0 }));
     },
   };
 }
