@@ -107,6 +107,8 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-o
 .rules b{font-family:var(--display);font-weight:400;color:var(--gold);font-variant-numeric:tabular-nums}
 .small{font-size:13px;color:var(--mute)}
 input{user-select:text;-webkit-user-select:text}
+#hand{flex-wrap:wrap;width:100%}
+.ends .mt{margin-left:6px;color:var(--gold);font-weight:700}
 #leave[hidden]{display:none}
 #toasts{position:fixed;z-index:25;left:max(12px,env(safe-area-inset-left,0px));right:max(12px,env(safe-area-inset-right,0px));
   top:calc(env(safe-area-inset-top,0px) + 72px);display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none}
@@ -199,7 +201,7 @@ var $=function(id){return document.getElementById(id)};
 var CFG={names:['Você','Robô Direita','Parceiro Robô','Robô Esquerda'],human:[true,false,false,false]};
 try{var sv=JSON.parse(localStorage.getItem('domino-cfg')||'null');if(sv&&sv.names&&sv.human){CFG=sv;CFG.human[0]=true}}catch(e){}
 var G=null;
-var ONLINE=false,MYSEAT=0,IAMHOST=false,ROOM=null,ROOMREF=null,REV=0,DB=null,UID=null,UNSUB=null,SAVED=null,MYNAME='',shownHand=-1;
+var NP=4,LOCALNP=(function(){try{return localStorage.getItem('domino-np')==='2'?2:4}catch(e){return 4}})(),ONLINE=false,MYSEAT=0,IAMHOST=false,ROOM=null,ROOMREF=null,REV=0,DB=null,UID=null,UNSUB=null,SAVED=null,MYNAME='',shownHand=-1;
 
 /* ---------- peças ---------- */
 function pips(n){
@@ -219,7 +221,10 @@ function svgPiece(a,b,vert,w,h,extra,css){
 function key(p){return p.a+'-'+p.b}
 
 /* ---------- regras ---------- */
-function team(s){return s%2}
+/* NP é o número de jogadores: 4 (duplas, cadeiras 0 a 3) ou 2 (um contra um, cadeiras 0 e 2, uma de frente para a outra). */
+function team(s){return NP===2?(s>>1):s%2}
+function nextSeat(s){return NP===2?(s+2)%4:(s+1)%4}
+function activeSeats(){return NP===2?[0,2]:[0,1,2,3]}
 function ends(){return G.chain.length?[G.chain[0].a,G.chain[G.chain.length-1].b]:null}
 function legalMoves(s){
   var hand=G.hands[s],mv=[],e=ends();
@@ -250,12 +255,15 @@ function batida(p,L,R,left){
 }
 function restantes(s,L,R){
   var n=0;
-  for(var o=0;o<4;o++)if(o!==s)G.hands[o].forEach(function(q){if(q.a===L||q.b===L||q.a===R||q.b===R)n++});
+  function hit(q){if(q.a===L||q.b===L||q.a===R||q.b===R)n++}
+  for(var o=0;o<4;o++)if(o!==s)G.hands[o].forEach(hit);
+  if(NP===2)G.monte.forEach(hit);
   return n;
 }
 function pipsOf(h){return h.reduce(function(t,p){return t+p.a+p.b},0)}
 function isClosed(){
   var e=ends();if(!e)return false;
+  if(NP===2&&G.monte.length)return false;   // no 1x1, quem trava ainda compra do monte
   for(var s=0;s<4;s++)for(var i=0;i<G.hands[s].length;i++){var p=G.hands[s][i];
     if(p.a===e[0]||p.b===e[0]||p.a===e[1]||p.b===e[1])return false}
   return true;
@@ -263,10 +271,17 @@ function isClosed(){
 function nm(s){return CFG.names[s]||('Jogador '+(s+1))}
 function myTeam(){return ONLINE?team(MYSEAT):0}
 function teamName(t){
+  if(NP===2)return nm(t*2);
   return humanCount()>1?('Dupla '+(t?'B':'A')):(t===myTeam()?'Nós':'Eles');
 }
-function dupla(t){return humanCount()>1?('a Dupla '+(t?'B':'A')):(t===myTeam()?'a nossa dupla':'a dupla adversária')}
-function venceu(t){return humanCount()>1?('A Dupla '+(t?'B':'A')+' venceu!'):(t===myTeam()?'Nós vencemos!':'Eles venceram!')}
+function dupla(t){
+  if(NP===2)return nm(t*2);
+  return humanCount()>1?('a Dupla '+(t?'B':'A')):(t===myTeam()?'a nossa dupla':'a dupla adversária');
+}
+function venceu(t){
+  if(NP===2)return (humanCount()===1&&t===myTeam())?'Você venceu!':nm(t*2)+' venceu!';
+  return humanCount()>1?('A Dupla '+(t?'B':'A')+' venceu!'):(t===myTeam()?'Nós vencemos!':'Eles venceram!');
+}
 function humanCount(){return ONLINE?1:CFG.human.filter(Boolean).length}
 function resText(r){
   var n=nm(r.seat);
@@ -277,7 +292,7 @@ function resText(r){
 
 /* ---------- partida ---------- */
 function newGame(){
-  G={scores:[0,0],hands:[[],[],[],[]],chain:[],turn:0,passed:[[],[],[],[]],passes:0,
+  G={scores:[0,0],hands:[[],[],[],[]],monte:[],chain:[],turn:0,passed:[[],[],[],[]],passes:0,
      gameId:Date.now().toString(36)+Math.random().toString(36).slice(2,6),tie:false,handNo:0,res:null,first:true,nextStarter:0,must:null,handOver:false,over:false,viewer:0,msg:'',token:0,cover:false,lastPlayer:0,lastPiece:null};
   for(var i=0;i<4;i++)G.passed[i]=[];
   armBackGuard();
@@ -286,7 +301,14 @@ function newGame(){
 function newHand(){
   var deck=[];for(var a=0;a<=6;a++)for(var b=a;b<=6;b++)deck.push({a:a,b:b});
   for(var i=deck.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=deck[i];deck[i]=deck[j];deck[j]=t}
-  G.hands=[0,1,2,3].map(function(s){return deck.slice(s*6,s*6+6).sort(function(x,y){return x.a-y.a||x.b-y.b})});
+  // Duplas: 6 peças cada e 4 dormem. Um contra um: 7 peças cada e 14 ficam no monte para comprar.
+  var hs=NP===2?7:6;
+  G.hands=[0,1,2,3].map(function(s){
+    if(NP===2&&(s===1||s===3))return [];
+    var k=NP===2?(s>>1):s;
+    return deck.slice(k*hs,k*hs+hs).sort(function(x,y){return x.a-y.a||x.b-y.b});
+  });
+  G.monte=NP===2?deck.slice(14):[];
   G.chain=[];G.passed=[[],[],[],[]];G.passes=0;G.handOver=false;G.token++;G.lastPiece=null;G.res=null;G.handNo++;
   if(G.first){
     var best=null,seat=0;
@@ -316,8 +338,9 @@ function step(remote){
   render();
   var moves=legalMoves(s);
   function autoPass(){
-    G.msg=nm(s)+' não tem peça e passa.';render();
-    setTimeout(function(){if(G&&G.token===tok&&G.turn===s&&!G.handOver)doPass(s)},PASS_MS);
+    var buy=NP===2&&G.monte.length>0;
+    G.msg=nm(s)+(buy?' não tem peça e compra do monte.':' não tem peça e passa.');render();
+    setTimeout(function(){if(G&&G.token===tok&&G.turn===s&&!G.handOver){if(buy)doDraw(s);else doPass(s)}},PASS_MS);
   }
   function bot(){
     armTurn(s,tok,false);
@@ -372,14 +395,20 @@ function autoPlay(s){
 }
 function botPlay(s){
   var moves=legalMoves(s);
-  if(!moves.length){doPass(s);return}
+  if(!moves.length){if(NP===2&&G.monte.length)doDraw(s);else doPass(s);return}
   doMove(s,botChoose(s,moves));
+}
+function doDraw(s){
+  G.hands[s].push(G.monte.pop());
+  G.hands[s].sort(function(x,y){return x.a-y.a||x.b-y.b});
+  G.msg=nm(s)+' comprou uma peça (monte: '+G.monte.length+').';
+  step();
 }
 function exhausted(v,chain){
   var n=0;chain.forEach(function(p){if(p.a===v||p.b===v)n++});return n>=7;
 }
 function botChoose(s,moves){
-  var hand=G.hands[s],e=ends(),partner=(s+2)%4,opp=[(s+1)%4,(s+3)%4],best=null,bs=-1e9;
+  var hand=G.hands[s],e=ends(),partner=NP===2?-1:(s+2)%4,opp=NP===2?[(s+2)%4]:[(s+1)%4,(s+3)%4],best=null,bs=-1e9;
   moves.forEach(function(m){
     var p=m.p,nl,nr,sc=Math.random()*1.2;
     if(m.side==='c'){nl=p.a;nr=p.b}
@@ -394,7 +423,7 @@ function botChoose(s,moves){
       sc+=(cnt(nl)+cnt(nr))*1.5;
       [nl,nr].forEach(function(v){
         opp.forEach(function(o){if(G.passed[o].indexOf(v)>=0)sc+=4});
-        if(G.passed[partner].indexOf(v)>=0)sc-=3;
+        if(partner>=0&&G.passed[partner].indexOf(v)>=0)sc-=3;
       });
       var nc=G.chain.concat([p]);
       if(exhausted(nl,nc)&&exhausted(nr,nc)){
@@ -420,15 +449,15 @@ function doMove(s,m,auto){
   G.msg=nm(s)+' jogou '+p.a+'|'+p.b+(auto?' (tempo esgotado, jogada automática).':'.');
   if(!G.hands[s].length){endHand({type:'batida',seat:s,info:info});return}
   if(isClosed()){endHand({type:'fechou',seat:s});return}
-  G.turn=(s+1)%4;
+  G.turn=nextSeat(s);
   step();
 }
 function doPass(s){
   var e=ends();
   if(e){G.passed[s].push(e[0]);G.passed[s].push(e[1])}
   G.passes++;G.msg=nm(s)+' passou.';
-  if(G.passes>=4){endHand({type:'fechou',seat:G.lastPlayer});return}
-  G.turn=(s+1)%4;
+  if(G.passes>=NP){endHand({type:'fechou',seat:G.lastPlayer});return}
+  G.turn=nextSeat(s);
   step();
 }
 function endHand(r){
@@ -448,7 +477,7 @@ function endHand(r){
       G.nextStarter=r.seat;
     }else{
       res.winner=1-ct;res.points=SCORE.chorou;res.bad=true;res.title='Fechou e chorou';res.kind='chorou';
-      G.nextStarter=(r.seat+1)%4;
+      G.nextStarter=nextSeat(r.seat);
     }
   }
   if(res.winner>=0)G.scores[res.winner]+=res.points;
@@ -466,18 +495,21 @@ function render(){
   var v=viewSeat(),mineT=team(v);
   [0,1].forEach(function(t){
     var el=$(t?'tB':'tA');
-    var seats=[0,1,2,3].filter(function(s){return team(s)===t}).map(nm).join(' + ');
+    var seats=activeSeats().filter(function(s){return team(s)===t}).map(nm).join(' + ');
     el.className='team '+(t?'b':'a')+(t===mineT&&humanCount()===1?' mine':'');
-    el.innerHTML='<div class="tn">'+esc(teamName(t))+' · '+esc(seats)+'</div><div class="pts">'+G.scores[t]+'</div><div class="bar"><i style="width:'+Math.min(100,G.scores[t]/TARGET*100)+'%"></i></div>';
+    el.innerHTML='<div class="tn">'+(NP===2?esc(seats):esc(teamName(t))+' · '+esc(seats))+'</div><div class="pts">'+G.scores[t]+'</div><div class="bar"><i style="width:'+Math.min(100,G.scores[t]/TARGET*100)+'%"></i></div>';
   });
-  var order=[(v+3)%4,(v+2)%4,(v+1)%4];
+  var order=NP===2?[(v+2)%4]:[(v+3)%4,(v+2)%4,(v+1)%4];
+  $('opps').style.gridTemplateColumns=NP===2?'minmax(0,260px)':'';
+  $('opps').style.justifyContent=NP===2?'center':'';
   $('opps').innerHTML=order.map(function(s){
     var mate=team(s)===mineT,n=G.hands[s].length,b='';
     for(var i=0;i<n;i++)b+='<i></i>';
     return '<div class="chip '+(G.turn===s&&!G.handOver?'active ':'')+(mate?'mate':'')+'"><div class="nm">'+esc(nm(s))+'</div><div class="sub">'+(mate?'parceiro':'adversário')+' · '+n+'</div><div class="backs">'+b+'</div></div>';
   }).join('');
   var e=ends();
-  $('ends').innerHTML=e?'<span>Pontas</span><b>'+e[0]+'</b><span>e</span><b>'+e[1]+'</b>':'';
+  $('ends').innerHTML=(e?'<span>Pontas</span><b>'+e[0]+'</b><span>e</span><b>'+e[1]+'</b>':'')
+    +(NP===2?'<span class="mt">Monte: '+G.monte.length+'</span>':'');
   renderBoard();
   $('btnChat').hidden=!chatEnabled();
   var myTurn=!G.handOver&&G.turn===v&&CFG.human[v]&&!G.cover;
@@ -487,10 +519,13 @@ function render(){
   $('who').textContent=nm(v)+' · '+pipsOf(G.hands[v])+' pontos na mão';
   var hide=humanCount()>1&&G.turn!==v;
   var mv=myTurn?legalMoves(v):[];
+  // Tamanho da pedra ajustado ao espaço: até 7 por fila, e quebra em outra fila se o jogador comprar muitas.
+  var cols=Math.min(Math.max(G.hands[v].length,1),7),avail=$('app').clientWidth||336;
+  var hw=Math.max(30,Math.min(44,Math.floor((avail-(cols-1)*6)/cols))),hh=hw*2;
   $('hand').innerHTML=G.hands[v].map(function(p,i){
-    if(hide)return '<button class="hp back" disabled><i></i></button>';
+    if(hide)return '<button class="hp back" disabled><i style="width:'+hw+'px;height:'+hh+'px"></i></button>';
     var ok=mv.some(function(m){return m.p===p});
-    return '<button class="hp '+(myTurn?(ok?'ok':'no'):'')+'" data-i="'+i+'" '+(ok?'':'disabled')+' aria-label="Peça '+p.a+' e '+p.b+'">'+svgPiece(p.a,p.b,true,44,88)+'</button>';
+    return '<button class="hp '+(myTurn?(ok?'ok':'no'):'')+'" data-i="'+i+'" '+(ok?'':'disabled')+' aria-label="Peça '+p.a+' e '+p.b+'">'+svgPiece(p.a,p.b,true,hw,hh)+'</button>';
   }).join('');
 }
 /* Corrente em serpentina com posições exatas: cada linha começa onde a anterior terminou, então as pedras ficam coladas. */
@@ -552,7 +587,7 @@ function showCover(s){
 }
 function showResult(res){
   if(!G||!G.handOver)return;
-  var rows=[0,1,2,3].map(function(s){
+  var rows=activeSeats().map(function(s){
     var h=res.hands[s].map(function(p){return svgPiece(p.a,p.b,false,36,18)}).join('');
     return '<div class="hrow"><div class="hn">'+esc(nm(s))+'</div><div class="hp2">'+(h||'<span class="small">sem peças</span>')+'</div><div class="hs">'+res.pips[s]+'</div></div>';
   }).join('');
@@ -580,7 +615,9 @@ function showRules(back){
     +'<span>Lasquinê preso (serve nas duas pontas e não sobra nenhuma)</span><b>'+SCORE.lasquinePreso+'</b>'
     +'<span>Fechou o jogo e tem menos pontos</span><b>'+SCORE.fechou+'</b>'
     +'<span>Fechou e chorou (tem mais pontos)</span><b>'+SCORE.chorou+'</b></div>'
-    +'<p class="small">No fechamento vale a soma das peças da dupla. Empate: ninguém marca e a próxima mão sai com a buxa de sena (0|6). Se duas regras servem, vale a de mais pontos. Quem faz '+TARGET+' pontos primeiro ganha. Jogo em duplas: você e o parceiro da frente contra os dois adversários. A mão tem 6 peças, 4 dormem.</p>'
+    +'<p class="small">No fechamento vale a soma das peças '+(NP===2?'de cada jogador':'da dupla')+'. Empate: ninguém marca e a próxima mão sai com a buxa de sena (0|6). Se duas regras servem, vale a de mais pontos. Quem faz '+TARGET+' pontos primeiro ganha. '
+      +(NP===2?'Um contra um: cada um pega 7 peças e 14 ficam no monte. Sem peça para jogar, compra do monte até poder; com o monte vazio, passa.'
+              :'Jogo em duplas: você e o parceiro da frente contra os dois adversários. A mão tem 6 peças, 4 dormem.')+'</p>'
     +'<button class="btn" id="rc">Voltar</button></div>');
   $('rc').onclick=function(){if(G&&G.handOver)showResult(G.res);else closeLayer()};
 }
@@ -599,32 +636,48 @@ function menuExtra(){
   return h+'<button class="btn ghost" id="ms">Sair da sala</button>';
 }
 function showSetup(){
-  var labels=['Você','Adversário (à sua direita)','Seu parceiro (à frente)','Adversário (à sua esquerda)'];
-  var order=[0,2,1,3];
+  if(!ONLINE)NP=LOCALNP;
+  var duo=NP===2;
+  var labels=duo?['Você','','Adversário','']:['Você','Adversário (à sua direita)','Seu parceiro (à frente)','Adversário (à sua esquerda)'];
+  var order=duo?[0,2]:[0,2,1,3];
   var rows=order.map(function(s){
-    var t=team(s);
-    return '<div class="seat"><label>'+labels[s]+' · <em class="'+(t?'b':'')+'">Dupla '+(t?'B':'A')+'</em></label>'
-      +'<input id="n'+s+'" value="'+esc(CFG.names[s])+'" maxlength="14" aria-label="Nome">'
+    var t=team(s),name=CFG.names[s];
+    if(duo&&name==='Parceiro Robô')name='Robô Adversário';
+    if(!duo&&name==='Robô Adversário')name='Parceiro Robô';
+    return '<div class="seat"><label>'+labels[s]+(duo?'':' · <em class="'+(t?'b':'')+'">Dupla '+(t?'B':'A')+'</em>')+'</label>'
+      +'<input id="n'+s+'" value="'+esc(name)+'" maxlength="14" aria-label="Nome">'
       +'<div class="seg" data-s="'+s+'"><button data-h="1" class="'+(CFG.human[s]?'on':'')+'" '+(s===0?'disabled':'')+'>Humano</button><button data-h="0" class="'+(CFG.human[s]?'':'on')+'" '+(s===0?'disabled':'')+'>Robô</button></div></div>';
   }).join('');
-  openLayer('<div class="card"><h2>Dominó do Meladinha</h2><p>Duplas, até 4 jogadores. Vence a dupla que fizer '+TARGET+' pontos primeiro. Com mais de um humano, o celular passa de mão em mão.</p>'
+  openLayer('<div class="card"><h2>Dominó do Meladinha</h2>'
+    +'<div class="seg" id="modeseg"><button data-m="4" class="'+(duo?'':'on')+'">Duplas (4)</button><button data-m="2" class="'+(duo?'on':'')+'">1 contra 1</button></div>'
+    +'<p>'+(duo?'Um contra um, 7 peças cada e monte para comprar. ':'Duplas, até 4 jogadores. ')+'Vence quem fizer '+TARGET+' pontos primeiro. Com mais de um humano, o celular passa de mão em mão.</p>'
     +(viaClaude()?'':'<div id="rkbox"></div>')+rows
     +'<button class="btn" id="go">Começar</button><button class="btn ghost" id="onl">Jogar online (cada um no seu celular)</button><button class="btn ghost" id="rl">Ver pontuação</button></div>');
   $('onl').onclick=openOnline;
   loadRankBox();
+  function keepNames(){order.forEach(function(s){var v=$('n'+s).value.trim();if(v)CFG.names[s]=v})}
+  $('modeseg').addEventListener('click',function(ev){
+    var b=ev.target.closest('button');if(!b)return;
+    keepNames();LOCALNP=+b.dataset.m;
+    try{localStorage.setItem('domino-np',String(LOCALNP))}catch(e){}
+    showSetup();
+  });
   document.querySelectorAll('.seg').forEach(function(sg){
+    if(sg.id==='modeseg')return;
     sg.addEventListener('click',function(ev){
       var b=ev.target.closest('button');if(!b||b.disabled)return;
       var s=+sg.dataset.s;CFG.human[s]=b.dataset.h==='1';
       var cur=$('n'+s).value.trim();
-      if(CFG.human[s]&&/^Robô/.test(cur))$('n'+s).value=s===2?'Parceiro':'Jogador '+(s+1);
-      if(!CFG.human[s]&&!/^Robô/.test(cur)&&s!==0)$('n'+s).value=s===2?'Parceiro Robô':(s===1?'Robô Direita':'Robô Esquerda');
+      if(CFG.human[s]&&/^Robô/.test(cur))$('n'+s).value=s===2?(duo?'Jogador 2':'Parceiro'):'Jogador '+(s+1);
+      if(!CFG.human[s]&&!/^Robô/.test(cur)&&!/^Parceiro Robô/.test(cur)&&s!==0)$('n'+s).value=s===2?(duo?'Robô Adversário':'Parceiro Robô'):(s===1?'Robô Direita':'Robô Esquerda');
       sg.querySelectorAll('button').forEach(function(x){x.classList.toggle('on',x===b)});
     });
   });
   $('go').onclick=function(){
-    for(var s=0;s<4;s++)CFG.names[s]=($('n'+s).value.trim()||CFG.names[s]);
+    keepNames();
     CFG.human[0]=true;
+    if(duo){CFG.human[1]=false;CFG.human[3]=false}
+    NP=LOCALNP;
     try{localStorage.setItem('domino-cfg',JSON.stringify(CFG))}catch(e){}
     newGame();
   };
@@ -843,8 +896,8 @@ function pushState(){
   REV++;
   var g=clone({hands:G.hands,chain:G.chain,turn:G.turn,scores:G.scores,passed:G.passed,passes:G.passes,first:G.first,
     nextStarter:G.nextStarter,must:G.must,handOver:G.handOver,over:G.over,lastPlayer:G.lastPlayer,lastPiece:G.lastPiece,
-    msg:G.msg,res:G.res||null,handNo:G.handNo,tie:G.tie||false});
-  var doc={rev:REV,phase:'play',host:ROOM.host,code:ROOM.code,gameId:G.gameId,seats:ROOM.seats,game:g};
+    msg:G.msg,res:G.res||null,handNo:G.handNo,tie:G.tie||false,monte:G.monte||[]});
+  var doc={rev:REV,phase:'play',host:ROOM.host,code:ROOM.code,gameId:G.gameId,mode:NP===2?'2':'4',seats:ROOM.seats,game:g};
   ROOM=doc;writeDoc(doc);
 }
 function mySeatIn(seats){for(var s=0;s<4;s++)if(seats[s]&&seats[s].uid&&seats[s].uid===UID)return s;return -1}
@@ -853,7 +906,8 @@ function setupFromSeats(seats){
 }
 function adopt(doc){
   var prevOver=G?G.handOver:false,first=!G;
-  var g=doc.game;g.token=(G?G.token:0)+1;g.cover=false;g.viewer=MYSEAT;g.gameId=doc.gameId;
+  NP=doc.mode==='2'?2:4;
+  var g=doc.game;g.token=(G?G.token:0)+1;g.cover=false;g.viewer=MYSEAT;g.gameId=doc.gameId;g.monte=g.monte||[];
   if(first)closeLayer();
   G=g;ROOM=doc;REV=doc.rev;
   render();
@@ -917,7 +971,7 @@ $('lout').onclick=function(){
 function leaveRoom(){
   if(UNSUB){UNSUB();UNSUB=null}
   if(IAMHOST&&ROOMREF){try{ROOMREF.delete()}catch(e){}}
-  ROOMREF=null;ROOM=null;ONLINE=false;IAMHOST=false;G=null;REV=0;shownHand=-1;wnext=null;
+  ROOMREF=null;ROOM=null;ONLINE=false;IAMHOST=false;G=null;REV=0;shownHand=-1;wnext=null;NP=LOCALNP;
   disarmTurn();closeChat();$('btnChat').hidden=true;CHAT=[];unread=0;
   if(SAVED){CFG.names=SAVED.names;CFG.human=SAVED.human;SAVED=null}
   ['opps','ends','board','status','who','hand','tA','tB'].forEach(function(id){$(id).innerHTML=''});
@@ -926,7 +980,7 @@ async function createRoom(name){
   if(!(await ensureNet())){netMsg('O jogo online só funciona logado no claude.ai, abrindo o link do jogo.');return}
   var code,ref,tries=0;
   do{code=genCode();ref=DB.doc('rooms/'+code);var sn=await ref.get();if(!sn.exists)break}while(++tries<5);
-  var doc={rev:0,phase:'lobby',host:UID,code:code,game:null,seats:{
+  var doc={rev:0,phase:'lobby',host:UID,code:code,game:null,mode:LOCALNP===2?'2':'4',seats:{
     '0':{type:'human',uid:UID,name:name},'1':{type:'bot',uid:null,name:'Robô Direita'},
     '2':{type:'open',uid:null,name:''},'3':{type:'bot',uid:null,name:'Robô Esquerda'}}};
   try{await ref.set(doc)}catch(e){netMsg('Não consegui criar a sala. Peça ao dono do jogo acesso de colaborador.');return}
@@ -958,13 +1012,22 @@ function renderLobby(){
     else if(!IAMHOST&&me<0&&x.type==='open')act='<button class="btn" data-sit="'+s+'" style="min-height:40px">Sentar aqui</button>';
     return '<div class="hrow"><div class="hn" style="flex:1">'+txt+'</div>'+act+'</div>';
   }
-  var body='<div class="small">Dupla A</div>'+row(0)+row(2)+'<div class="small">Dupla B</div>'+row(1)+row(3);
+  var duo=ROOM.mode==='2';
+  var modeBox=IAMHOST?'<div class="seg" id="modeseg"><button data-m="4" class="'+(duo?'':'on')+'">Duplas (4)</button><button data-m="2" class="'+(duo?'on':'')+'">1 contra 1</button></div>'
+    :'<p class="small">Modo: '+(duo?'1 contra 1':'duplas (4 jogadores)')+'</p>';
+  var body=duo?'<div class="small">Jogador 1</div>'+row(0)+'<div class="small">Jogador 2</div>'+row(2)
+    :'<div class="small">Dupla A</div>'+row(0)+row(2)+'<div class="small">Dupla B</div>'+row(1)+row(3);
   var foot=IAMHOST?'<button class="btn" id="os"'+(open?' disabled':'')+'>'+(open?'Falta preencher as vagas':'Começar o jogo')+'</button>'
     :(me<0?'<p class="small">Escolha uma vaga aberta.</p>':'<p class="small">Você está dentro. Aguardando o anfitrião começar.</p>');
   openLayer('<div class="card"><h2>Sala '+esc(ROOM.code)+'</h2><p>Quem vai entrar abre este mesmo jogo, toca em Jogar online e digita o código <b>'+esc(ROOM.code)+'</b>.</p>'
-    +'<div class="hands">'+body+'</div>'+foot+(chatEnabled()?'<button class="btn ghost" id="ochat">Bate-papo'+(unread?' ('+unread+')':'')+'</button>':'')+'<button class="btn ghost" id="ox">Sair da sala</button></div>');
+    +modeBox+'<div class="hands">'+body+'</div>'+foot+(chatEnabled()?'<button class="btn ghost" id="ochat">Bate-papo'+(unread?' ('+unread+')':'')+'</button>':'')+'<button class="btn ghost" id="ox">Sair da sala</button></div>');
   if($('ochat'))$('ochat').onclick=openChat;
+  if($('modeseg'))$('modeseg').addEventListener('click',function(ev){
+    var b=ev.target.closest('button');if(!b)return;
+    ROOMREF.update({mode:b.dataset.m}).catch(function(e){console.error(e)});
+  });
   document.querySelectorAll('#layer .seg').forEach(function(sg){
+    if(sg.id==='modeseg')return;
     sg.addEventListener('click',function(ev){
       var b=ev.target.closest('button');if(!b)return;
       var s=+sg.dataset.s,o={};
@@ -979,6 +1042,7 @@ function renderLobby(){
     };
   });
   if($('os'))$('os').onclick=function(){
+    NP=ROOM.mode==='2'?2:4;
     setupFromSeats(ROOM.seats);MYSEAT=0;ROOM.phase='play';shownHand=-1;closeLayer();newGame();
   };
   $('ox').onclick=function(){leaveRoom();showSetup()};

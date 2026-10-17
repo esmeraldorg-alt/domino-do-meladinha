@@ -129,7 +129,9 @@ async function recordIfDone(room, doc) {
   }
   if (new Set(humans.map((h) => h.uid)).size < 2) return;
   const win = g.scores[0] >= g.scores[1] ? 0 : 1;
-  for (const h of humans) await store.addStats(h.uid, { wins: h.s % 2 === win ? 1 : 0, games: 1 });
+  // Em duplas as cadeiras 0 e 2 formam a dupla A; no 1 contra 1 a cadeira 0 é o time 0 e a 2 o time 1.
+  const teamOf = (s) => (doc.mode === '2' ? s >> 1 : s % 2);
+  for (const h of humans) await store.addStats(h.uid, { wins: teamOf(h.s) === win ? 1 : 0, games: 1 });
 }
 
 /* ---------- conexões ---------- */
