@@ -363,7 +363,10 @@ function resText(r){
 }
 
 /* ---------- partida ---------- */
+/* Avisa o servidor se estou jogando uma partida só minha (contra robôs) ou no menu, para aparecer em "Jogando agora". */
+function presenca(modo){try{if(DB&&DB.send&&!viaClaude())DB.send({t:'presence',mode:modo})}catch(e){}}
 function newGame(){
+  if(!ONLINE)presenca('local');
   G={scores:[0,0],hands:[[],[],[],[]],monte:[],chain:[],turn:0,passed:[[],[],[],[]],passes:0,
      gameId:Date.now().toString(36)+Math.random().toString(36).slice(2,6),tie:false,handNo:0,res:null,first:true,nextStarter:0,must:null,handOver:false,over:false,viewer:0,msg:'',token:0,cover:false,lastPlayer:0,lastPiece:null};
   for(var i=0;i<4;i++)G.passed[i]=[];
@@ -840,6 +843,7 @@ function iphoneNoNavegador(){
   try{return /iPhone|iPad|iPod/.test(navigator.userAgent)&&!navigator.standalone&&!matchMedia('(display-mode: standalone)').matches}catch(e){return false}
 }
 function showSetup(){
+  presenca('menu');
   if(!ONLINE)NP=LOCALNP;
   var duo=NP===2;
   var labels=duo?['Você','','Adversário','']:['Você','Adversário (à sua direita)','Seu parceiro (à frente)','Adversário (à sua esquerda)'];
@@ -930,6 +934,7 @@ function makeWsDB(){
       // depois de uma queda ou de um reinício do servidor, entra de novo com a mesma identidade antes de reassinar a mesa
       if(tk&&ME)sock.send(JSON.stringify({t:'auth',token:tk}));
       else if(ME&&ME.guest&&gst)sock.send(JSON.stringify({t:'guest',nick:gst.nick,gid:gst.gid}));
+      if(!ONLINE&&G&&!G.over)sock.send(JSON.stringify({t:'presence',mode:'local'}));
       queue.splice(0).forEach(function(m){sock.send(m)});
       Object.keys(subs).forEach(function(c){if(subs[c].length)sock.send(JSON.stringify({t:'sub',code:c}))});
     };
@@ -1380,6 +1385,13 @@ function startTables(){
   stopTables();
   function tick(){
     if(!$('mesas')||!ME||!DB){stopTables();return}
+    DB.raw({t:'online'}).then(function(r){
+      var box=$('agora');if(!box)return;
+      var list=r.list||[];
+      box.innerHTML=list.length?list.map(function(u){
+        return '<div class="mesa"><div class="mi"><strong>'+esc(u.nick)+'</strong><small>'+esc(u.onde)+'</small></div></div>';
+      }).join(''):'<p class="small">Ninguém conectado agora.</p>';
+    }).catch(function(){});
     DB.raw({t:'rooms'}).then(function(r){
       var el=$('mesas');if(!el){stopTables();return}
       var list=r.list||[];
@@ -1405,7 +1417,8 @@ function showOnline(){
     +(ME?'<div class="me"><strong>'+esc(ME.nick)+'</strong><span id="mest">'+(ME.guest?'convidado · não entra no ranking':statTxt(ME.wins,ME.losses,ME.abandons))+'</span></div>'
         :'<div class="seat"><label>Seu nome</label><input id="on" value="'+esc(CFG.names[0])+'" maxlength="14" aria-label="Seu nome"></div>')
     +'<button class="btn" id="oc">Criar sala</button>'
-    +(ME?'<div class="rkhead"><span>Mesas abertas</span></div><div id="mesas" class="mesas"></div>':'')
+    +(ME?'<div class="rkhead"><span>Mesas abertas</span></div><div id="mesas" class="mesas"></div>'
+        +'<div class="rkhead"><span>Jogando agora</span></div><div id="agora" class="mesas"></div>':'')
     +'<div class="seat"><label>Código da sala</label><input id="oj" maxlength="4" autocapitalize="characters" placeholder="ABCD" style="text-transform:uppercase" aria-label="Código da sala"></div>'
     +'<button class="btn" id="oe">Entrar na sala</button><p class="small" id="omsg"></p>'
     +(ME?'<div class="btns"><button class="btn ghost" id="orank">Ranking</button><button class="btn ghost" id="oout">'+(ME.guest?'Sair (convidado)':'Sair da conta')+'</button></div>':'')

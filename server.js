@@ -216,9 +216,32 @@ async function handle(ws, m) {
   const reply = (o) => send(ws, { t: 'ack', id: m.id, ...o });
   if (m.t === 'auth' || m.t === 'login' || m.t === 'register' || m.t === 'guest') return handleAuth(ws, m, reply);
   if (m.t === 'ranking') return reply({ list: await store.top(20) }); // público: aparece já na tela inicial
+  if (m.t === 'presence') { ws.presence = m.mode === 'local' ? 'local' : 'menu'; return; }   // vale também para quem não entrou com conta
   if (!ws.user) return reply({ error: 'auth' });
   const semConta = { uid: ws.user.id, nick: ws.user.nick, wins: 0, losses: 0, abandons: 0, guest: true };
   if (m.t === 'me') { if (ws.user.guest) return reply(semConta); const u = await store.byId(ws.user.id); return reply(u ? userOut(u) : { error: 'auth' }); }
+  if (m.t === 'online') {
+    // Quem está conectado agora e o que está fazendo: numa mesa, assistindo, jogando contra robôs no próprio aparelho, ou no menu.
+    const gente = new Map();
+    let anonimos = 0;
+    wss.clients.forEach((w) => {
+      if (w.readyState === 1 && !w.user && w.presence === 'local') anonimos++;   // joga contra robôs sem ter entrado com conta nem como convidado
+      if (w.readyState !== 1 || !w.user) return;
+      let onde = w.presence === 'local' ? 'jogando contra robôs' : 'no menu', ordem = w.presence === 'local' ? 2 : 3;
+      for (const c of w.codes) {
+        const r = rooms.get(c);
+        if (!r || !r.doc) continue;
+        const sentado = Object.values(r.doc.seats || {}).some((x) => x && x.uid === w.user.id);
+        onde = (sentado ? 'na mesa ' : 'assistindo a mesa ') + c; ordem = sentado ? 1 : 2;
+        if (sentado) break;
+      }
+      const ant = gente.get(w.user.id);
+      if (!ant || ordem < ant.ordem) gente.set(w.user.id, { nick: w.user.nick, onde, ordem });
+    });
+    const list = [...gente.values()].sort((a, b) => a.ordem - b.ordem || a.nick.localeCompare(b.nick)).slice(0, 40).map(({ nick, onde }) => ({ nick, onde }));
+    if (anonimos) list.push({ nick: anonimos === 1 ? '1 jogador sem cadastro' : anonimos + ' jogadores sem cadastro', onde: 'jogando contra robôs' });
+    return reply({ list });
+  }
   if (m.t === 'rooms') {
     // Mesas com alguém conectado: no lobby (com ou sem vaga) e em jogo. Qualquer pessoa com conta pode assistir.
     const list = [];
