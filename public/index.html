@@ -603,12 +603,12 @@ function endHand(r){
 var RANKNOTE='';
 /* Saiu de uma partida local antes de terminar: conta um abandono para quem está com a conta. */
 function reportAbandon(){
-  if(ONLINE||!G||G.over||!ME||!DB||viaClaude()||!DB.send||!G.handNo)return;
+  if(ONLINE||!G||G.over||!ME||ME.guest||!DB||viaClaude()||!DB.send||!G.handNo)return;
   DB.raw({t:'abandon',gameId:G.gameId}).then(function(r){ME.abandons=r.abandons||0}).catch(function(){});
 }
 function reportResult(res){
   RANKNOTE='';
-  if(res.final===undefined||viaClaude()||!ME||!DB||!CFG.human[0])return;
+  if(res.final===undefined||viaClaude()||!ME||ME.guest||!DB||!CFG.human[0])return;
   var win=res.final===team(0);
   DB.raw({t:'result',gameId:G.gameId,win:win}).then(function(r){
     ME.wins=r.wins;ME.losses=r.losses||0;
@@ -771,7 +771,7 @@ function showResult(res){
     var h=res.hands[s].map(function(p){return svgPiece(p.a,p.b,false,36,18)}).join('');
     return '<div class="hrow"><div class="hn">'+esc(nm(s))+'</div><div class="hp2">'+(h||'<span class="small">sem peças</span>')+'</div><div class="hs">'+res.pips[s]+'</div></div>';
   }).join('');
-  var note=res.final===undefined?'':(ONLINE?'Partida registrada no ranking.':(RANKNOTE||(ME||viaClaude()?'':'Entre em Jogar online com a sua conta para as partidas contarem no ranking.')));
+  var note=res.final===undefined?'':(ME&&ME.guest?'Convidado não entra no ranking. Crie uma conta em Jogar online para as partidas contarem.':ONLINE?'Partida registrada no ranking.':(RANKNOTE||(ME||viaClaude()?'':'Entre em Jogar online com a sua conta para as partidas contarem no ranking.')));
   var head=res.final!==undefined?'<div class="big">'+esc(venceu(res.final))+'</div><p>Chegou a '+G.scores[res.final]+' pontos. Placar final: '+G.scores[0]+' a '+G.scores[1]+'.</p>'+(note?'<p class="small">'+esc(note)+'</p>':''):'';
   openLayer('<div class="card"><div class="big'+(res.bad?' bad':'')+'">'+esc(res.title)+(res.points?' · +'+res.points:'')+'</div>'
     +'<p>'+esc(resText(res))+'</p>'+head
@@ -967,14 +967,28 @@ async function ensureNet(){
 }
 /* ---------- conta: apelido e senha ---------- */
 function applyAuth(r){
-  ME={id:r.uid,nick:r.nick,wins:r.wins||0,losses:r.losses||0,abandons:r.abandons||0};UID=ME.id;MYNAME=ME.nick;
+  ME={id:r.uid,nick:r.nick,wins:r.wins||0,losses:r.losses||0,abandons:r.abandons||0,guest:!!r.guest};UID=ME.id;MYNAME=ME.nick;
   if(r.token)setToken(r.token);
+}
+/* Convidado: entra só com apelido, aparece nas mesas e joga online, mas não entra no ranking. O aparelho lembra o apelido. */
+function getGuest(){try{return JSON.parse(localStorage.getItem('domino-guest')||'null')}catch(e){return null}}
+function setGuest(g){try{if(g)localStorage.setItem('domino-guest',JSON.stringify(g));else localStorage.removeItem('domino-guest')}catch(e){}}
+async function entrarConvidado(nick){
+  netDB();
+  var old=getGuest();
+  var r=await DB.raw({t:'guest',nick:nick,gid:old&&old.nick===nick?old.gid:undefined});
+  applyAuth(r);setToken('');setGuest({nick:nick,gid:r.uid});
 }
 async function autoLogin(){
   netDB();
-  var tk=getToken();if(!tk)return false;
-  try{var r=await DB.raw({t:'auth',token:tk});applyAuth(r);return true}
-  catch(e){if(e&&e.code==='auth')setToken('');return false}
+  var tk=getToken();
+  if(tk){
+    try{var r=await DB.raw({t:'auth',token:tk});applyAuth(r);return true}
+    catch(e){if(e&&e.code==='auth')setToken('')}
+  }
+  var g=getGuest();
+  if(g){try{await entrarConvidado(g.nick);return true}catch(e){setGuest(null)}}
+  return false;
 }
 async function openOnline(){
   if(viaClaude()){showOnline();return}
@@ -985,12 +999,20 @@ async function openOnline(){
   showOnline();
 }
 function showLogin(msg){
-  openLayer('<div class="card"><h2>Entrar</h2><p>Use um apelido e uma senha. Se ainda não tem conta, crie uma na hora.</p>'
+  openLayer('<div class="card"><h2>Entrar</h2><p>Use um apelido e uma senha. Se ainda não tem conta, crie uma na hora. Quem não quer se cadastrar joga como convidado e aparece nas mesas, mas não entra no ranking.</p>'
     +'<div class="seat"><label>Apelido</label><input id="lu" maxlength="16" autocomplete="username" autocapitalize="none" aria-label="Apelido"></div>'
     +'<div class="seat"><label>Senha</label><input id="lp" type="password" maxlength="64" autocomplete="current-password" aria-label="Senha"></div>'
     +'<p class="err" id="lerr">'+esc(msg||'')+'</p>'
     +'<div class="btns"><button class="btn" id="lgo">Entrar</button><button class="btn ghost" id="lnew">Criar conta</button></div>'
+    +'<div class="seat"><label>Ou jogue sem cadastro (não entra no ranking)</label><input id="lg" maxlength="16" autocapitalize="none" placeholder="Seu apelido" aria-label="Apelido de convidado"></div>'
+    +'<button class="btn ghost" id="lguest">Jogar sem cadastro</button>'
     +'<button class="btn ghost" id="lback">Voltar</button></div>');
+  $('lguest').onclick=async function(){
+    var nick=$('lg').value.trim();
+    $('lerr').textContent='Aguarde...';
+    try{await entrarConvidado(nick);await ensureNet();showOnline()}
+    catch(e){$('lerr').textContent=authError(e&&e.code)}
+  };
   async function go(kind){
     var nick=$('lu').value.trim(),pass=$('lp').value;
     $('lerr').textContent='Aguarde...';
@@ -1007,7 +1029,7 @@ function showLogin(msg){
 }
 function authError(c){
   return {nick_invalido:'O apelido precisa ter de 3 a 16 letras, números, _ ou -.',senha_curta:'A senha precisa ter pelo menos 4 caracteres.',
-    nick_em_uso:'Esse apelido já existe. Escolha outro.',login_invalido:'Apelido ou senha incorretos.',muitas_tentativas:'Muitas tentativas. Espere alguns minutos.',
+    nick_em_uso:'Esse apelido já está em uso. Escolha outro.',nick_registrado:'Esse apelido é de uma conta cadastrada. Escolha outro ou entre com a senha.',login_invalido:'Apelido ou senha incorretos.',muitas_tentativas:'Muitas tentativas. Espere alguns minutos.',
     auth:'Sessão expirada. Entre de novo.'}[c]||'Não foi possível conectar. Tente de novo.';
 }
 /* Ranking resumido na tela inicial: top 5 e, se já tem conta neste aparelho, a sua pontuação. */
@@ -1024,11 +1046,11 @@ async function loadRankBox(){
     netDB();
     if(!ME&&getToken())await autoLogin();
     var mine=null,r=await DB.raw({t:'ranking'});
-    if(ME){try{mine=await DB.raw({t:'me'});ME.wins=mine.wins;ME.losses=mine.losses||0;ME.abandons=mine.abandons||0}catch(e){}}
+    if(ME&&!ME.guest){try{mine=await DB.raw({t:'me'});ME.wins=mine.wins;ME.losses=mine.losses||0;ME.abandons=mine.abandons||0}catch(e){}}
     var el=$('rkbox');if(!el)return;
     var rows=rankRows(r.list||[],5);
     el.innerHTML='<div class="rkhead"><span>Ranking</span><button class="rklink" id="rkall">Ver todos</button></div>'
-      +(ME?'<div class="me"><strong>'+esc(ME.nick)+'</strong><span>'+statTxt(ME.wins,ME.losses,ME.abandons)+'</span></div>'
+      +(ME?'<div class="me"><strong>'+esc(ME.nick)+'</strong><span>'+(ME.guest?'convidado · não entra no ranking':statTxt(ME.wins,ME.losses,ME.abandons))+'</span></div>'
           :'<p class="small">Entre em Jogar online para criar a conta. As partidas contra robôs e contra amigos contam no ranking.</p>')
       +(rows?'<table class="rank">'+RANK_HEAD+rows+'</table>':'<p class="small">Ninguém terminou uma partida ainda.</p>');
     $('rkall').onclick=showRanking;
@@ -1045,7 +1067,7 @@ async function showRanking(){
   $('rb').onclick=ME?showOnline:showSetup;
 }
 function logout(){
-  setToken('');ME=null;UID=null;MYNAME='';
+  setToken('');setGuest(null);ME=null;UID=null;MYNAME='';
   if(DB&&DB.close)DB.close();DB=null;
   showSetup();
 }
@@ -1365,13 +1387,13 @@ function startTables(){
 }
 function showOnline(){
   openLayer('<div class="card"><h2>Jogar online</h2><p>Cada um joga no seu celular. '+(viaClaude()?'Quem entrar precisa estar logado no claude.ai e ter acesso de colaborador a este jogo.':'Crie a sala e passe o código de 4 letras para os outros jogadores.')+'</p>'
-    +(ME?'<div class="me"><strong>'+esc(ME.nick)+'</strong><span id="mest">'+statTxt(ME.wins,ME.losses,ME.abandons)+'</span></div>'
+    +(ME?'<div class="me"><strong>'+esc(ME.nick)+'</strong><span id="mest">'+(ME.guest?'convidado · não entra no ranking':statTxt(ME.wins,ME.losses,ME.abandons))+'</span></div>'
         :'<div class="seat"><label>Seu nome</label><input id="on" value="'+esc(CFG.names[0])+'" maxlength="14" aria-label="Seu nome"></div>')
     +'<button class="btn" id="oc">Criar sala</button>'
     +(ME?'<div class="rkhead"><span>Mesas abertas</span></div><div id="mesas" class="mesas"></div>':'')
     +'<div class="seat"><label>Código da sala</label><input id="oj" maxlength="4" autocapitalize="characters" placeholder="ABCD" style="text-transform:uppercase" aria-label="Código da sala"></div>'
     +'<button class="btn" id="oe">Entrar na sala</button><p class="small" id="omsg"></p>'
-    +(ME?'<div class="btns"><button class="btn ghost" id="orank">Ranking</button><button class="btn ghost" id="oout">Sair da conta</button></div>':'')
+    +(ME?'<div class="btns"><button class="btn ghost" id="orank">Ranking</button><button class="btn ghost" id="oout">'+(ME.guest?'Sair (convidado)':'Sair da conta')+'</button></div>':'')
     +'<button class="btn ghost" id="ob">Voltar</button></div>');
   function nameOf(){return ME?ME.nick:($('on').value.trim()||'Jogador')}
   $('oc').onclick=function(){netMsg('Criando a sala...');createRoom(nameOf())};
@@ -1381,7 +1403,7 @@ function showOnline(){
     startTables();
     $('orank').onclick=showRanking;
     $('oout').onclick=logout;
-    DB.raw({t:'me'}).then(function(r){ME.wins=r.wins;ME.losses=r.losses||0;ME.abandons=r.abandons||0;var el=$('mest');if(el)el.textContent=statTxt(ME.wins,ME.losses,ME.abandons)}).catch(function(){});
+    if(!ME.guest)DB.raw({t:'me'}).then(function(r){ME.wins=r.wins;ME.losses=r.losses||0;ME.abandons=r.abandons||0;var el=$('mest');if(el)el.textContent=statTxt(ME.wins,ME.losses,ME.abandons)}).catch(function(){});
   }
 }
 

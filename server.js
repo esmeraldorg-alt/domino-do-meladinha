@@ -64,6 +64,7 @@ function verify(token) {
     return p.exp > Date.now() ? p : null;
   } catch { return null; }
 }
+const guests = new Map(); // apelido em minúsculas -> { gid, ws } (convidados conectados)
 const fails = new Map(); // ip -> { n, first }
 function blocked(ip) {
   const f = fails.get(ip);
@@ -93,6 +94,17 @@ async function handleAuth(ws, m, reply) {
   if (blocked(ip)) return reply({ error: 'muitas_tentativas' });
   const nick = String(m.nick || '').trim();
   const pass = String(m.pass || '');
+  if (m.t === 'guest') {
+    // Convidado: joga e aparece nas mesas só com um apelido, sem senha. Não fica no banco e não entra no ranking.
+    if (!/^[A-Za-z0-9_-]{3,16}$/.test(nick)) return reply({ error: 'nick_invalido' });
+    if (await store.byNick(nick.toLowerCase())) return reply({ error: 'nick_registrado' });
+    const gid = /^g_[a-z0-9]{8,24}$/.test(String(m.gid || '')) ? m.gid : 'g_' + crypto.randomBytes(8).toString('hex');
+    const key = nick.toLowerCase(), outro = guests.get(key);
+    if (outro && outro.gid !== gid && outro.ws.readyState === 1) return reply({ error: 'nick_em_uso' });
+    guests.set(key, { gid, ws });
+    ws.user = { id: gid, nick: nick + ' (convidado)', guest: true };
+    return reply({ uid: gid, nick: ws.user.nick, wins: 0, losses: 0, abandons: 0, guest: true });
+  }
   if (m.t === 'register') {
     if (!/^[A-Za-z0-9_-]{3,16}$/.test(nick)) return reply({ error: 'nick_invalido' });
     if (pass.length < 4 || pass.length > 64) return reply({ error: 'senha_curta' });
@@ -175,10 +187,11 @@ wss.on('connection', (ws, req) => {
 
 async function handle(ws, m) {
   const reply = (o) => send(ws, { t: 'ack', id: m.id, ...o });
-  if (m.t === 'auth' || m.t === 'login' || m.t === 'register') return handleAuth(ws, m, reply);
+  if (m.t === 'auth' || m.t === 'login' || m.t === 'register' || m.t === 'guest') return handleAuth(ws, m, reply);
   if (m.t === 'ranking') return reply({ list: await store.top(20) }); // público: aparece já na tela inicial
   if (!ws.user) return reply({ error: 'auth' });
-  if (m.t === 'me') { const u = await store.byId(ws.user.id); return reply(u ? userOut(u) : { error: 'auth' }); }
+  const semConta = { uid: ws.user.id, nick: ws.user.nick, wins: 0, losses: 0, abandons: 0, guest: true };
+  if (m.t === 'me') { if (ws.user.guest) return reply(semConta); const u = await store.byId(ws.user.id); return reply(u ? userOut(u) : { error: 'auth' }); }
   if (m.t === 'rooms') {
     // Mesas com alguém conectado: no lobby (com ou sem vaga) e em jogo. Qualquer pessoa com conta pode assistir.
     const list = [];
@@ -195,6 +208,7 @@ async function handle(ws, m) {
     list.sort((a, b) => b.touched - a.touched);
     return reply({ list: list.slice(0, 20).map(({ touched, ...rest }) => rest) });
   }
+  if ((m.t === 'abandon' || m.t === 'result') && ws.user.guest) return reply(semConta);   // convidado não pontua
   if (m.t === 'abandon') {
     // Saiu de uma partida local (contra robôs ou no mesmo celular) antes de terminar.
     const gameId = String(m.gameId || '').slice(0, 40);
