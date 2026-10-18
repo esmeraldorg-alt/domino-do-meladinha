@@ -13,6 +13,7 @@ const TOKEN_DAYS = 90;
 const EMOJIS = ['😀', '😂', '😎', '😡', '😭', '👏', '👍', '🔥', '🤔', '🙏'];
 const store = makeStore();
 const rooms = new Map(); // código -> { doc, subs:Set<ws>, touched, chat:[], recorded }
+let RECUPERADAS = 0;      // quantas mesas voltaram do banco no último início do servidor
 let SECRET = null;
 
 const ARQUIVOS = {
@@ -20,16 +21,24 @@ const ARQUIVOS = {
   '/icon-180.png': ['icon-180.png', 'image/png'],
   '/icon-192.png': ['icon-192.png', 'image/png'],
   '/icon-512.png': ['icon-512.png', 'image/png'],
+  '/sw.js': ['sw.js', 'application/javascript; charset=utf-8'],
 };
 
 const server = http.createServer((req, res) => {
   const url = req.url.split('?')[0];
-  if (url === '/healthz') { res.writeHead(200); res.end('ok'); return; }
+  if (url === '/healthz') {
+    // Diagnóstico: quantas mesas há na memória e quantas estão guardadas no banco, e há quanto tempo o servidor está de pé.
+    Promise.resolve(store.countRooms ? store.countRooms() : 0).catch(() => -1).then((salvas) => {
+      res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('ok mesas_na_memoria=' + rooms.size + ' mesas_salvas=' + salvas + ' no_ar_ha_s=' + Math.round(process.uptime()) + ' mesas_recuperadas=' + RECUPERADAS);
+    });
+    return;
+  }
   // Arquivos para instalar o jogo na tela inicial do celular (ícone e manifesto).
   const estatico = ARQUIVOS[url];
   if (estatico) {
     try {
-      res.writeHead(200, { 'content-type': estatico[1], 'cache-control': 'public, max-age=86400' });
+      res.writeHead(200, { 'content-type': estatico[1], 'cache-control': url === '/sw.js' ? 'no-cache' : 'public, max-age=86400' });
       res.end(fs.readFileSync(path.join(__dirname, 'public', estatico[0])));
     } catch { res.writeHead(404); res.end('not found'); }
     return;
@@ -513,6 +522,7 @@ async function aplicarAjustes() {
     for (const [code, doc] of await store.loadRooms()) {
       if (doc && doc.seats) rooms.set(code, { doc, subs: new Set(), touched: Date.now(), chat: [], recorded: doc.game && doc.game.over ? doc.gameId : null });
     }
+    RECUPERADAS = rooms.size;
     console.log('Mesas recuperadas: ' + rooms.size);
   } catch (e) { console.error('Não consegui recuperar as mesas:', e.message); }
   console.log('Contas guardadas em: ' + store.kind);

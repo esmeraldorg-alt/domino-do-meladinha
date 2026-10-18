@@ -1493,6 +1493,8 @@ function showOnline(){
   }
 }
 
+// Permite instalar o jogo pelo Chrome ("Instalar app"), que não mostra o aviso de fonte desconhecida do APK.
+try{if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)&&!viaClaude())navigator.serviceWorker.register('/sw.js').catch(function(){})}catch(e){}
 showSetup();
 })();
 </script>

@@ -26,6 +26,7 @@ function fileStore() {
     // Mesas ativas guardadas para sobreviver a reinício do servidor (publicação nova, plano grátis que dorme).
     async saveRoom(code, doc) { db.rooms = db.rooms || {}; db.rooms[code] = { doc, t: Date.now() }; save(); },
     async deleteRoom(code) { if (db.rooms) delete db.rooms[code]; save(); },
+    async countRooms() { return Object.keys(db.rooms || {}).length; },
     async loadRooms() {
       return Object.entries(db.rooms || {}).filter(([, v]) => Date.now() - v.t < 6 * 3600 * 1000).map(([c, v]) => [c, v.doc]);
     },
@@ -95,6 +96,7 @@ function mongoStore(uri) {
     // Mesas ativas guardadas para sobreviver a reinício do servidor (publicação nova, plano grátis que dorme).
     async saveRoom(code, doc) { await ready; await salas.replaceOne({ _id: code }, { _id: code, doc, t: Date.now() }, { upsert: true }); },
     async deleteRoom(code) { await ready; await salas.deleteOne({ _id: code }); },
+    async countRooms() { await ready; return salas.countDocuments({}); },
     async loadRooms() {
       await ready;
       const list = await salas.find({ t: { $gt: Date.now() - 6 * 3600 * 1000 } }).toArray();
