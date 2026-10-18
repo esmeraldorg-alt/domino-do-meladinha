@@ -34,8 +34,9 @@ button{font:inherit;color:inherit;cursor:pointer}
 h1,h2{font-family:var(--display);font-weight:400;margin:0;letter-spacing:.02em}
 
 /* menu e placar */
-.menu{position:absolute;z-index:7;top:var(--st);left:var(--sl);width:40px;height:40px;border-radius:12px;border:1px solid rgba(255,255,255,.28);background:rgba(21,13,58,.78);font-size:18px}
-#scorebox{position:absolute;z-index:4;top:var(--st);left:calc(var(--sl) + 48px);display:flex;flex-direction:column;gap:3px;width:150px}
+.menu{position:absolute;z-index:7;top:var(--st);left:calc(50% - 99px - 46px);width:40px;height:40px;border-radius:12px;border:1px solid rgba(255,255,255,.28);background:rgba(21,13,58,.78);font-size:18px}
+#scorebox{position:absolute;z-index:4;top:var(--st);left:50%;transform:translateX(-50%);display:flex;flex-wrap:wrap;justify-content:center;gap:3px 4px;width:198px}
+#scorebox .team{flex:1 1 90px;min-width:0}
 .team{display:grid;grid-template-columns:1fr auto;align-items:center;column-gap:6px;background:rgba(21,13,58,.78);border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:2px 8px 4px}
 .team .tn{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .team .pts{font-family:var(--display);font-size:20px;line-height:1.1;font-variant-numeric:tabular-nums}
@@ -46,10 +47,10 @@ h1,h2{font-family:var(--display);font-weight:400;margin:0;letter-spacing:.02em}
 
 /* jogadores */
 .pl{position:absolute;z-index:3;display:flex;flex-direction:column;align-items:center;gap:2px;width:96px}
-.s-top{top:var(--st);left:50%;transform:translateX(-50%)}
-.s-left{left:var(--sl);top:46%;transform:translateY(-50%)}
-.s-right{right:var(--sr);top:46%;transform:translateY(-50%)}
-.s-me{left:var(--sl);bottom:var(--sb)}
+.s-tl{left:var(--sl);top:var(--st)}
+.s-tr{right:var(--sr);top:var(--st)}
+.s-bl{left:var(--sl);bottom:var(--sb)}
+.s-br{right:var(--sr);bottom:var(--sb)}
 .av{position:relative;width:54px;height:54px;border-radius:50%;padding:3px;background:rgba(255,255,255,.24)}
 .av .face{width:100%;height:100%;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--c,#6a55d8);
   font-family:var(--display);font-size:22px;color:#fff;box-shadow:inset 0 -7px 12px rgba(0,0,0,.28)}
@@ -70,7 +71,7 @@ h1,h2{font-family:var(--display);font-weight:400;margin:0;letter-spacing:.02em}
 @keyframes subir{0%{opacity:0;transform:translate(-50%,10px) scale(.6)}12%{opacity:1;transform:translate(-50%,0) scale(1.15)}80%{opacity:1}100%{opacity:0;transform:translate(-50%,-26px) scale(1)}}
 
 /* corrente */
-#center{position:absolute;z-index:2;left:calc(var(--sl) + 106px);right:calc(var(--sr) + 106px);top:calc(var(--st) + 90px);bottom:calc(var(--hb) + var(--hh) + 26px)}
+#center{position:absolute;z-index:2;left:var(--sl);right:calc(var(--sr) + 58px);top:calc(var(--st) + 100px);bottom:calc(var(--hb) + var(--hh) + 26px)}
 .ends{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--mute);flex-wrap:wrap;background:rgba(21,13,58,.78);border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:1px 8px}
 .ends:empty{display:none}
 .ends b{color:var(--gold);font-family:var(--display);font-weight:400;font-size:14px}
@@ -104,11 +105,11 @@ h1,h2{font-family:var(--display);font-weight:400;margin:0;letter-spacing:.02em}
   clip-path:polygon(0 0,100% 0,calc(100% - 14px) 100%,0 100%);animation:deslizar .4s ease-out}
 #waiting[hidden]{display:none}
 @keyframes deslizar{from{transform:translateX(-100%)}to{transform:none}}
-#acts{position:absolute;z-index:7;right:var(--sr);bottom:var(--sb);display:flex;gap:8px;align-items:center}
+#acts{position:absolute;z-index:7;right:var(--sr);top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:10px;align-items:center}
 .act{position:relative;width:46px;height:46px;border-radius:50%;border:1px solid rgba(255,255,255,.35);background:rgba(21,13,58,.82);font-size:22px;line-height:1;display:flex;align-items:center;justify-content:center;padding:0}
 .act b{position:absolute;top:-5px;right:-5px;min-width:20px;height:20px;border-radius:10px;background:var(--brick);color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center;padding:0 5px}
 .act[hidden],.act b[hidden]{display:none}
-#emojis{position:absolute;z-index:8;right:var(--sr);bottom:calc(var(--sb) + 56px);display:grid;grid-template-columns:repeat(5,1fr);gap:4px;padding:8px;border-radius:14px;background:rgba(21,13,58,.95);border:1px solid rgba(255,255,255,.3);box-shadow:0 6px 20px rgba(0,0,0,.5)}
+#emojis{position:absolute;z-index:8;right:calc(var(--sr) + 58px);top:50%;transform:translateY(-50%);display:grid;grid-template-columns:repeat(5,1fr);gap:4px;padding:8px;border-radius:14px;background:rgba(21,13,58,.95);border:1px solid rgba(255,255,255,.3);box-shadow:0 6px 20px rgba(0,0,0,.5)}
 #emojis[hidden]{display:none}
 #emojis button{width:44px;height:44px;border:0;background:transparent;font-size:26px;border-radius:10px;padding:0}
 #emojis button:active{background:rgba(255,255,255,.2)}
@@ -199,17 +200,15 @@ input{user-select:text;-webkit-user-select:text}
 .chatrow input{flex:1;min-width:0;height:46px;border-radius:10px;border:1px solid var(--felt-lite);background:var(--felt);color:var(--ink);padding:0 12px;font:inherit;font-size:16px}
 .chatrow .btn{min-width:84px;flex:0 0 auto}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
-/* tela em pé: os três jogadores de cima ficam lado a lado, o centro ocupa a largura toda e a mão sobe acima do seu avatar */
-@media (max-aspect-ratio:1/1){
-  .s-top{top:calc(var(--st) + 112px)}
-  .s-left{left:var(--sl);top:calc(var(--st) + 112px);transform:none}
-  .s-right{right:var(--sr);top:calc(var(--st) + 112px);transform:none}
-  #scorebox{width:min(190px,calc(100vw - 110px))}
-  :root{--hh:clamp(90px,16vh,130px);--hb:calc(var(--sb) + 98px)}
-  #center{left:var(--sl);right:var(--sr);top:calc(var(--st) + 226px)}
-  #handwrap{left:var(--sl);right:var(--sr)}
-  #status{left:var(--sl);right:var(--sr)}
-}
+/* o jogo é na horizontal: com o celular em pé a mesa fica coberta por um aviso para girar (as telas de menu, login e ranking continuam normais) */
+#girar{display:none;position:fixed;inset:0;z-index:9;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:24px;text-align:center;color:#fff;
+  background:radial-gradient(ellipse at 50% 45%,#6c54da 0%,#3b2896 55%,#150d3a 100%);font-family:var(--display);font-size:22px}
+#girar p{margin:0;max-width:300px;line-height:1.25}
+#girar small{font-family:var(--body);font-size:14px;color:var(--mute)}
+.fone{width:44px;height:78px;border:4px solid #fff;border-radius:10px;position:relative;animation:girarfone 2.6s ease-in-out infinite}
+.fone::after{content:'';position:absolute;left:50%;bottom:5px;width:14px;height:3px;margin-left:-7px;border-radius:2px;background:#fff}
+@keyframes girarfone{0%,25%{transform:rotate(0)}60%,100%{transform:rotate(-90deg)}}
+@media (orientation:portrait){body.playing #girar{display:flex}}
 </style>
 
 <div id="app">
@@ -229,6 +228,7 @@ input{user-select:text;-webkit-user-select:text}
   </div>
   <div id="fx"></div>
 </div>
+<div id="girar"><div class="fone"></div><p>Gire o celular para jogar</p><small>A mesa é na horizontal. Se a tela não girar, ligue a rotação automática do celular.</small></div>
 <div id="layer"></div>
 <div id="toasts" aria-live="polite"></div>
 <div id="leave" class="layer" hidden style="z-index:40">
@@ -626,18 +626,18 @@ function render(){
     el.innerHTML='<div class="tn">'+(NP===2?esc(seats):esc(teamName(t))+' · '+esc(seats))+'</div><div class="pts">'+G.scores[t]+'</div><div class="bar"><i style="width:'+Math.min(100,G.scores[t]/TARGET*100)+'%"></i></div>';
   });
   // jogadores em círculos: embaixo você, e os outros pela posição relativa a você
-  var plan=NP===2?[{s:v,c:'s-me'},{s:(v+2)%4,c:'s-top'}]
-    :[{s:v,c:'s-me'},{s:(v+3)%4,c:'s-left'},{s:(v+2)%4,c:'s-top'},{s:(v+1)%4,c:'s-right'}];
+  // cada jogador num canto da mesa: você embaixo à esquerda e os outros girando ao redor (embaixo à direita, em cima à direita, em cima à esquerda)
+  var plan=NP===2?[{s:v,c:'s-bl'},{s:(v+2)%4,c:'s-tr'}]
+    :[{s:v,c:'s-bl'},{s:(v+1)%4,c:'s-br'},{s:(v+2)%4,c:'s-tr'},{s:(v+3)%4,c:'s-tl'}];
   $('seats').innerHTML=plan.map(function(o){
-    var s=o.s,mate=s!==v&&team(s)===mineT&&NP!==2,n=G.hands[s].length,isMe=o.c==='s-me';
+    var s=o.s,mate=s!==v&&team(s)===mineT&&NP!==2,n=G.hands[s].length,isMe=o.c==='s-bl';
     var active=G.turn===s&&!G.handOver;
     var role=isMe?(WATCH?'assistindo':pipsOf(G.hands[s])+' pontos'):(mate?'parceiro':'adversário');
-    var backs='';if(!isMe)for(var i=0;i<n;i++)backs+='<i></i>';
     return '<div class="pl '+o.c+(active?' turn':'')+(mate?' mate':'')+'" data-s="'+s+'">'
       +'<div class="av" style="--c:'+avatarColor(s)+'"><div class="face">'+avatarFace(s)+'</div>'+(isMe&&WATCH?'':'<div class="cnt">'+n+'</div>')+'</div>'
-      +'<div class="plate"><div class="nm">'+esc(nm(s))+'</div><small class="role">'+role+'</small><small class="sec"></small></div>'
-      +(isMe||o.c==='s-top'?'':'<div class="backs">'+backs+'</div>')+'</div>';
+      +'<div class="plate"><div class="nm">'+esc(nm(s))+'</div><small class="role">'+role+'</small><small class="sec"></small></div></div>';
   }).join('');
+  document.body.classList.add('playing');
   var e=ends();
   $('ends').innerHTML=(e?'<span>Pontas</span><b>'+e[0]+'</b><span>e</span><b>'+e[1]+'</b>':'')
     +(NP===2?'<span class="mt">Monte: '+G.monte.length+'</span>':'');
@@ -681,6 +681,14 @@ function seatOfNick(n){
   if(!ROOM||!ROOM.seats)return -1;
   for(var s=0;s<4;s++){var x=ROOM.seats[s];if(x&&x.type==='human'&&x.name===n)return s}
   return -1;
+}
+/* Tenta tela cheia e travar na horizontal. Só funciona a partir de um toque do jogador e em navegadores que permitem (Chrome no Android); nos outros o aviso de girar cobre. */
+function deitar(){
+  try{
+    var el=document.documentElement,p=el.requestFullscreen?el.requestFullscreen():null;
+    var travar=function(){try{if(screen.orientation&&screen.orientation.lock)screen.orientation.lock('landscape').catch(function(){})}catch(e){}};
+    if(p&&p.then)p.then(travar).catch(function(){});else travar();
+  }catch(e){}
 }
 /* Avatar: círculo colorido com a inicial do apelido (robôs mostram um robô). A cor sai do nome, então é sempre a mesma. */
 function avatarColor(s){
@@ -794,7 +802,8 @@ function showRules(back){
   $('rc').onclick=function(){if(G&&G.handOver)showResult(G.res);else closeLayer()};
 }
 function showMenu(){
-  openLayer('<div class="card"><h2>Menu</h2><div class="btns" style="flex-direction:column"><button class="btn" id="mc">Continuar</button><button class="btn ghost" id="mr">Ver pontuação</button><button class="btn ghost" id="msnd">'+(SOUND?'Som e vibração: ligados':'Som e vibração: desligados')+'</button>'+menuExtra()+'</div></div>');
+  openLayer('<div class="card"><h2>Menu</h2><div class="btns" style="flex-direction:column"><button class="btn" id="mc">Continuar</button><button class="btn ghost" id="mr">Ver pontuação</button><button class="btn ghost" id="mfs">Tela cheia na horizontal</button><button class="btn ghost" id="msnd">'+(SOUND?'Som e vibração: ligados':'Som e vibração: desligados')+'</button>'+menuExtra()+'</div></div>');
+  $('mfs').onclick=function(){deitar();closeLayer()};
   $('msnd').onclick=function(){
     SOUND=!SOUND;try{localStorage.setItem('domino-som',SOUND?'1':'0')}catch(e){}
     $('msnd').textContent=SOUND?'Som e vibração: ligados':'Som e vibração: desligados';
@@ -854,6 +863,7 @@ function showSetup(){
     });
   });
   $('go').onclick=function(){
+    deitar();
     keepNames();
     CFG.human[0]=true;
     if(duo){CFG.human[1]=false;CFG.human[3]=false}
@@ -1188,7 +1198,7 @@ function leaveRoom(){
   disarmTurn();closeChat();$('btnChat').hidden=true;CHAT=[];unread=0;SEEN={pass:'',res:''};$('fx').innerHTML='';
   if(SAVED){CFG.names=SAVED.names;CFG.human=SAVED.human;SAVED=null}
   ['seats','ends','board','status','hand','tA','tB'].forEach(function(id){$(id).innerHTML=''});
-  $('app').classList.remove('myturn');$('emojis').hidden=true;$('btnEmoji').hidden=true;
+  $('app').classList.remove('myturn');$('emojis').hidden=true;$('btnEmoji').hidden=true;document.body.classList.remove('playing');
 }
 async function createRoom(name){
   if(!(await ensureNet())){netMsg('O jogo online só funciona logado no claude.ai, abrindo o link do jogo.');return}
@@ -1264,11 +1274,13 @@ function renderLobby(){
   });
   document.querySelectorAll('#layer [data-sit]').forEach(function(b){
     b.onclick=function(){
+      deitar();
       var o={};o[b.dataset.sit]={type:'human',uid:UID,name:MYNAME||'Jogador'};
       ROOMREF.update({seats:o}).catch(function(e){console.error(e)});
     };
   });
   if($('os'))$('os').onclick=function(){
+    deitar();
     NP=ROOM.mode==='2'?2:4;
     setupFromSeats(ROOM.seats);MYSEAT=0;ROOM.phase='play';shownHand=-1;closeLayer();newGame();
   };
