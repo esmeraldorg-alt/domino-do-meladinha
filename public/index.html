@@ -1199,7 +1199,7 @@ function onRoom(snap){
   if(G&&WATCH){
     // quem assistia acabou de sentar no lugar de um robô: passa a jogar
     var eu=mySeatIn(doc.seats);
-    if(eu>=0){MYSEAT=eu;WATCH=false;closeLayer();deitar()}
+    if(eu>=0){MYSEAT=eu;WATCH=false;closeLayer();deitar();showToast({n:'Mesa',x:'Você sentou na mesa! Boa partida.'})}
   }
   if(!G){
     var me=mySeatIn(doc.seats);
@@ -1322,11 +1322,16 @@ function takeable(){
   if(!WATCH||!ROOM||!G||!ROOM.seats)return [];
   return activeSeats().filter(function(s){var x=ROOM.seats[s];return x&&x.type==='bot'&&(x.left||G.handOver)});
 }
+function reservado(){return !!(ROOM&&ROOM.reservas&&ROOM.reservas.some(function(r){return r.uid===UID}))}
 function sitPill(){
   var t=takeable();
   if(t.length)return '<button class="btn" id="btnSit">Sentar na mesa</button>';
+  if(reservado()){
+    var pos=ROOM.reservas.findIndex(function(r){return r.uid===UID})+1;
+    return '<button class="btn ghost" id="btnSit" data-wait="1">Lugar reservado'+(pos>1?' ('+pos+'º da fila)':'')+' · você entra quando a rodada acabar · toque para cancelar</button>';
+  }
   var temRobo=activeSeats().some(function(s){var x=ROOM&&ROOM.seats&&ROOM.seats[s];return x&&x.type==='bot'});
-  return '<button class="btn ghost" id="btnSit" data-wait="1">'+(temRobo?'Sentar quando acabar a rodada':'Mesa cheia')+'</button>';
+  return '<button class="btn" id="btnSit" data-wait="1">'+(temRobo?'Reservar lugar (entra quando a rodada acabar)':'Reservar lugar (entra se alguém sair)')+'</button>';
 }
 function sitButtons(){
   return takeable().map(function(s){
@@ -1346,7 +1351,20 @@ function wireTake(){
 }
 function sitFlow(){
   var t=takeable();
-  if(!t.length){showToast({n:'Mesa',x:'Você poderá sentar no lugar de um robô quando a rodada acabar.'});return}
+  if(!t.length){
+    // ainda não dá para sentar: toque reserva o lugar (entra sozinho quando liberar) e outro toque cancela
+    if(!DB||!ROOM)return;
+    if(reservado()){
+      DB.raw({t:'unreserve',code:ROOM.code}).then(function(){showToast({n:'Mesa',x:'Reserva cancelada.'})}).catch(function(){});
+      return;
+    }
+    DB.raw({t:'reserve',code:ROOM.code}).then(function(r){
+      if(!r.sentou)showToast({n:'Mesa',x:'Lugar reservado: você entra sozinho assim que a rodada acabar.'});
+    }).catch(function(e){
+      showToast({n:'Mesa',x:{fila_cheia:'A fila desta mesa está cheia.',ja_sentado:'Você já está sentado nesta mesa.'}[e&&e.code]||'Não consegui reservar agora.'});
+    });
+    return;
+  }
   if(t.length===1){takeSeat(t[0]);return}
   openLayer('<div class="card"><h2>Sentar na mesa</h2><p>Escolha o lugar de um robô:</p><div class="btns" style="flex-direction:column">'+sitButtons()+'</div><button class="btn ghost" id="sitx">Cancelar</button></div>');
   wireTake();$('sitx').onclick=closeLayer;

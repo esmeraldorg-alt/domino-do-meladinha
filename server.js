@@ -308,14 +308,17 @@ async function handle(ws, m) {
         if (!seated) return reply({ error: 'sem_lugar' });
         if (cur.phase === 'play' && m.doc.phase === 'play' && m.doc.rev < cur.rev) return reply({});
         m.doc.host = cur.host;
+        m.doc.reservas = cur.reservas || [];   // a fila de quem reservou lugar é do servidor, o estado do jogo não a conhece
         // Cadeiras já entregues a um robô porque a pessoa saiu não voltam a ser humanas por um estado atrasado.
         for (const s of Object.keys(cur.seats || {})) {
           if (cur.seats[s] && (cur.seats[s].left || cur.seats[s].took) && m.doc.seats) m.doc.seats[s] = cur.seats[s];
         }
       }
       room.doc = m.doc; room.touched = Date.now();
-      broadcast(code, room); reply({});
+      // O ranking olha quem estava sentado ANTES de entrarem os que reservaram lugar.
       recordIfDone(room, room.doc).catch((e) => console.error('ranking:', e.message));
+      aplicarReservas(room);
+      broadcast(code, room); reply({});
       break;
     }
     case 'update': {
@@ -360,6 +363,31 @@ async function handle(ws, m) {
       reply({});
       break;
     }
+    case 'reserve': {
+      if (!room || !room.doc || !room.subs.has(ws)) return reply({ error: 'invalid_argument' });
+      const d = room.doc;
+      if (d.phase !== 'play' || !d.game) return reply({ error: 'indisponivel' });
+      if (Object.values(d.seats || {}).some((x) => x && x.uid === ws.user.id)) return reply({ error: 'ja_sentado' });
+      d.reservas = Array.isArray(d.reservas) ? d.reservas : [];
+      if (!d.reservas.some((r) => r.uid === ws.user.id)) {
+        if (d.reservas.length >= 6) return reply({ error: 'fila_cheia' });
+        d.reservas.push({ uid: ws.user.id, nick: ws.user.nick });
+      }
+      aplicarReservas(room);                       // se já tem cadeira livre, senta na hora
+      d.rev = (d.rev || 0) + 1;
+      room.touched = Date.now();
+      broadcast(code, room);
+      reply({ sentou: Object.values(d.seats || {}).some((x) => x && x.uid === ws.user.id) });
+      break;
+    }
+    case 'unreserve': {
+      if (!room || !room.doc || !Array.isArray(room.doc.reservas)) return reply({});
+      const antes = room.doc.reservas.length;
+      room.doc.reservas = room.doc.reservas.filter((r) => r.uid !== ws.user.id);
+      if (room.doc.reservas.length !== antes) { room.doc.rev = (room.doc.rev || 0) + 1; broadcast(code, room); }
+      reply({});
+      break;
+    }
     case 'emoji': {
       // Reação rápida: só emojis da lista, no máximo uma a cada 1,2 segundo.
       if (!room || !room.subs.has(ws) || !EMOJIS.includes(m.e)) return;
@@ -392,6 +420,31 @@ async function handle(ws, m) {
   }
 }
 
+/* ---------- reserva de lugar ---------- */
+// Quem assiste pode reservar: assim que uma cadeira de robô fica livre (a rodada acabou, ou alguém saiu), o primeiro da fila senta sozinho.
+function aplicarReservas(room) {
+  const d = room.doc;
+  if (!d || d.phase !== 'play' || !d.game || !Array.isArray(d.reservas) || !d.reservas.length) return false;
+  const ativos = d.mode === '2' ? ['0', '2'] : ['0', '1', '2', '3'];
+  let mudou = false;
+  for (let i = 0; i < d.reservas.length;) {
+    const r = d.reservas[i];
+    const jaSentado = Object.values(d.seats || {}).some((x) => x && x.uid === r.uid);
+    const presente = [...room.subs].some((w) => w.user && w.user.id === r.uid);
+    if (jaSentado || !presente) { d.reservas.splice(i, 1); mudou = true; continue; }   // já sentou ou foi embora
+    const livres = ativos.filter((s) => d.seats[s] && d.seats[s].type === 'bot' && (d.seats[s].left || d.game.handOver));
+    if (!livres.length) { i++; continue; }
+    const s = livres.find((k) => d.seats[k].left) || livres[0];   // prefere a cadeira que alguém deixou
+    const antigo = d.seats[s].name;
+    d.seats[s] = { type: 'human', uid: r.uid, name: r.nick, took: true };
+    d.reservas.splice(i, 1);
+    d.game.msg = r.nick + ' sentou no lugar de ' + antigo + '.';
+    mudou = true;
+  }
+  if (mudou) d.rev = (d.rev || 0) + 1;
+  return mudou;
+}
+
 /* ---------- saída de jogador ---------- */
 // Quem sai de uma partida em andamento vira um robô na mesma cadeira e ganha um abandono.
 // No lobby a vaga volta a ficar livre. Se o anfitrião sai, a mesa passa para outra pessoa; sem ninguém, a sala fecha.
@@ -416,6 +469,7 @@ function convertSeat(room, code, uid) {
     }
     d.rev = (d.rev || 0) + 1;
     if (d.game) d.game.msg = nick + ' saiu e um robô assumiu o lugar.';
+    aplicarReservas(room);   // a cadeira que ficou vaga vai para o primeiro da fila, se houver
   }
   room.touched = Date.now();
   broadcast(code, room);
