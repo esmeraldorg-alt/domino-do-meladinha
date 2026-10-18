@@ -57,6 +57,17 @@ function send(ws, o) { if (ws.readyState === 1) ws.send(JSON.stringify(o)); }
 function broadcast(code, room) {
   const msg = JSON.stringify({ t: 'doc', code, exists: !!room.doc, doc: room.doc });
   room.subs.forEach((w) => { if (w.readyState === 1) w.send(msg); });
+  persistir(code, room);
+}
+// Guarda a mesa no banco (no máximo uma vez por segundo) para ela sobreviver a um reinício do servidor.
+const adiados = new Map();
+function persistir(code, room) {
+  if (adiados.has(code)) return;
+  adiados.set(code, setTimeout(() => {
+    adiados.delete(code);
+    const op = room.doc ? store.saveRoom(code, room.doc) : store.deleteRoom(code);
+    Promise.resolve(op).catch((e) => console.error('mesa:', e.message));
+  }, 1000));
 }
 function getRoom(code, create) {
   let r = rooms.get(code);
@@ -394,7 +405,9 @@ setInterval(() => {
     ws.alive = false; ws.ping();
   });
   const now = Date.now();
-  rooms.forEach((r, c) => { if (!r.subs.size && now - r.touched > 6 * 3600 * 1000) rooms.delete(c); });
+  rooms.forEach((r, c) => {
+    if (!r.subs.size && now - r.touched > 6 * 3600 * 1000) { rooms.delete(c); Promise.resolve(store.deleteRoom(c)).catch(() => {}); }
+  });
 }, 25000);
 
 // ajustes.json: correções de pontos feitas à mão, cada uma aplicada uma única vez (pela chave "id").
@@ -417,6 +430,13 @@ async function aplicarAjustes() {
   if (store.ready) await store.ready;
   SECRET = await store.secret();
   await aplicarAjustes();
+  // Reabre as mesas que estavam ativas antes do reinício; os jogadores reconectam sozinhos e continuam.
+  try {
+    for (const [code, doc] of await store.loadRooms()) {
+      if (doc && doc.seats) rooms.set(code, { doc, subs: new Set(), touched: Date.now(), chat: [], recorded: doc.game && doc.game.over ? doc.gameId : null });
+    }
+    console.log('Mesas recuperadas: ' + rooms.size);
+  } catch (e) { console.error('Não consegui recuperar as mesas:', e.message); }
   console.log('Contas guardadas em: ' + store.kind);
   server.listen(PORT, () => console.log('Dominó do Meladinha na porta ' + PORT));
 })().catch((e) => { console.error('Falha ao iniciar:', e); process.exit(1); });

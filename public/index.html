@@ -926,8 +926,10 @@ function makeWsDB(){
     sock=new WebSocket(url);
     sock.onopen=function(){
       open=true;
-      var tk=getToken();
+      var tk=getToken(),gst=getGuest();
+      // depois de uma queda ou de um reinício do servidor, entra de novo com a mesma identidade antes de reassinar a mesa
       if(tk&&ME)sock.send(JSON.stringify({t:'auth',token:tk}));
+      else if(ME&&ME.guest&&gst)sock.send(JSON.stringify({t:'guest',nick:gst.nick,gid:gst.gid}));
       queue.splice(0).forEach(function(m){sock.send(m)});
       Object.keys(subs).forEach(function(c){if(subs[c].length)sock.send(JSON.stringify({t:'sub',code:c}))});
     };

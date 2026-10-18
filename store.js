@@ -23,6 +23,12 @@ function fileStore() {
       if (!db.secret) { db.secret = crypto.randomBytes(32).toString('hex'); save(); }
       return db.secret;
     },
+    // Mesas ativas guardadas para sobreviver a reinício do servidor (publicação nova, plano grátis que dorme).
+    async saveRoom(code, doc) { db.rooms = db.rooms || {}; db.rooms[code] = { doc, t: Date.now() }; save(); },
+    async deleteRoom(code) { if (db.rooms) delete db.rooms[code]; save(); },
+    async loadRooms() {
+      return Object.entries(db.rooms || {}).filter(([, v]) => Date.now() - v.t < 6 * 3600 * 1000).map(([c, v]) => [c, v.doc]);
+    },
     // Devolve true só na primeira vez que a chave é usada (para ajustes que não podem rodar duas vezes).
     async once(key) {
       db.once = db.once || {};
@@ -64,12 +70,13 @@ function fileStore() {
 function mongoStore(uri) {
   const { MongoClient } = require('mongodb');
   const client = new MongoClient(uri);
-  let users, meta;
+  let users, meta, salas;
   const ready = (async () => {
     await client.connect();
     const db = client.db(process.env.MONGODB_DB || 'domino');
     users = db.collection('users');
     meta = db.collection('meta');
+    salas = db.collection('rooms');
     await users.createIndex({ nickLower: 1 }, { unique: true });
     await users.createIndex({ id: 1 }, { unique: true });
   })();
@@ -84,6 +91,14 @@ function mongoStore(uri) {
         d = await meta.findOne({ _id: 'secret' });
       }
       return d.v;
+    },
+    // Mesas ativas guardadas para sobreviver a reinício do servidor (publicação nova, plano grátis que dorme).
+    async saveRoom(code, doc) { await ready; await salas.replaceOne({ _id: code }, { _id: code, doc, t: Date.now() }, { upsert: true }); },
+    async deleteRoom(code) { await ready; await salas.deleteOne({ _id: code }); },
+    async loadRooms() {
+      await ready;
+      const list = await salas.find({ t: { $gt: Date.now() - 6 * 3600 * 1000 } }).toArray();
+      return list.map((r) => [r._id, r.doc]);
     },
     // Devolve true só na primeira vez que a chave é usada (para ajustes que não podem rodar duas vezes).
     async once(key) {
