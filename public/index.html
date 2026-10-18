@@ -1,6 +1,14 @@
 <!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Dominó do Meladinha</title>
 <meta name="claude:viewport-fit-sides" content="cover">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<link rel="icon" type="image/png" href="/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Dominó">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#3b2896">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Barlow:wght@500;600;700&display=swap" rel="stylesheet">
@@ -827,6 +835,10 @@ function menuExtra(){
   if(IAMHOST)for(var s=1;s<4;s++)if(CFG.human[s])h+='<button class="btn ghost" id="tk'+s+'">Robô assume '+esc(nm(s))+'</button>';
   return h+'<button class="btn ghost" id="ms">Sair da sala</button>';
 }
+/* iPhone e iPad abrindo pelo Safari (não pelo ícone da tela inicial): mostra a dica de instalar. */
+function iphoneNoNavegador(){
+  try{return /iPhone|iPad|iPod/.test(navigator.userAgent)&&!navigator.standalone&&!matchMedia('(display-mode: standalone)').matches}catch(e){return false}
+}
 function showSetup(){
   if(!ONLINE)NP=LOCALNP;
   var duo=NP===2;
@@ -843,7 +855,8 @@ function showSetup(){
   openLayer('<div class="card"><h2>Dominó do Meladinha</h2>'
     +'<div class="seg" id="modeseg"><button data-m="4" class="'+(duo?'':'on')+'">Duplas (4)</button><button data-m="2" class="'+(duo?'on':'')+'">1 contra 1</button></div>'
     +'<p>'+(duo?'Um contra um, 7 peças cada e monte para comprar. ':'Duplas, até 4 jogadores. ')+'Vence quem fizer '+TARGET+' pontos primeiro. Com mais de um humano, o celular passa de mão em mão.</p>'
-    +(viaClaude()?'':'<div id="rkbox"></div>')+rows
+    +(viaClaude()?'':'<div id="rkbox"></div>')
+    +(iphoneNoNavegador()?'<p class="small">No iPhone: toque em Compartilhar e depois em Adicionar à Tela de Início para instalar o jogo como app, em tela cheia.</p>':'')+rows
     +'<button class="btn" id="go">Começar</button><button class="btn ghost" id="onl">Jogar online (cada um no seu celular)</button><button class="btn ghost" id="rl">Ver pontuação</button></div>');
   $('onl').onclick=openOnline;
   loadRankBox();

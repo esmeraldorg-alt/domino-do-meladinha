@@ -15,9 +15,25 @@ const store = makeStore();
 const rooms = new Map(); // código -> { doc, subs:Set<ws>, touched, chat:[], recorded }
 let SECRET = null;
 
+const ARQUIVOS = {
+  '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json'],
+  '/icon-180.png': ['icon-180.png', 'image/png'],
+  '/icon-192.png': ['icon-192.png', 'image/png'],
+  '/icon-512.png': ['icon-512.png', 'image/png'],
+};
+
 const server = http.createServer((req, res) => {
   const url = req.url.split('?')[0];
   if (url === '/healthz') { res.writeHead(200); res.end('ok'); return; }
+  // Arquivos para instalar o jogo na tela inicial do celular (ícone e manifesto).
+  const estatico = ARQUIVOS[url];
+  if (estatico) {
+    try {
+      res.writeHead(200, { 'content-type': estatico[1], 'cache-control': 'public, max-age=86400' });
+      res.end(fs.readFileSync(path.join(__dirname, 'public', estatico[0])));
+    } catch { res.writeHead(404); res.end('not found'); }
+    return;
+  }
   if (url === '/' || url === '/index.html') {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache' });
     res.end(fs.readFileSync(path.join(__dirname, 'public', 'index.html')));
