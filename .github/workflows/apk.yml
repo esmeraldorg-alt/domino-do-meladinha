@@ -45,7 +45,20 @@ jobs:
 
       - name: Compilar
         working-directory: android
-        run: gradle --no-daemon assembleRelease
+        run: |
+          set -o pipefail
+          gradle --no-daemon assembleRelease --stacktrace 2>&1 | tee ../build.log
+
+      - name: Guardar o registro do erro (só se a compilação falhar)
+        if: failure()
+        run: |
+          tail -n 150 build.log > android/ultimo-erro.log
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git add -f android/ultimo-erro.log
+          git commit -m "Registro do erro do APK"
+          git pull --rebase origin main
+          git push
 
       - name: Publicar o APK
         env:
