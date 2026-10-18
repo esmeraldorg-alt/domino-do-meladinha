@@ -245,7 +245,7 @@ async function handle(ws, m) {
         m.doc.host = cur.host;
         // Cadeiras já entregues a um robô porque a pessoa saiu não voltam a ser humanas por um estado atrasado.
         for (const s of Object.keys(cur.seats || {})) {
-          if (cur.seats[s] && cur.seats[s].left && m.doc.seats) m.doc.seats[s] = cur.seats[s];
+          if (cur.seats[s] && (cur.seats[s].left || cur.seats[s].took) && m.doc.seats) m.doc.seats[s] = cur.seats[s];
         }
       }
       room.doc = m.doc; room.touched = Date.now();
@@ -275,6 +275,26 @@ async function handle(ws, m) {
       if (room && room.doc && room.doc.host === ws.user.id) { room.doc = null; broadcast(code, room); }
       reply({});
       break;
+    case 'take': {
+      // Quem assiste senta no lugar de um robô: na hora, se a cadeira foi deixada por alguém que saiu; senão, só entre as rodadas.
+      if (!room || !room.doc || !room.subs.has(ws)) return reply({ error: 'invalid_argument' });
+      const d = room.doc;
+      if (d.phase !== 'play' || !d.game || d.game.over) return reply({ error: 'indisponivel' });
+      if (Object.values(d.seats || {}).some((x) => x && x.uid === ws.user.id)) return reply({ error: 'ja_sentado' });
+      const s = String(m.seat);
+      const ativos = d.mode === '2' ? ['0', '2'] : ['0', '1', '2', '3'];
+      const x = d.seats[s];
+      if (!x || !ativos.includes(s) || x.type !== 'bot') return reply({ error: 'indisponivel' });
+      if (!(x.left || d.game.handOver)) return reply({ error: 'espere_rodada' });
+      const antigo = x.name;
+      d.seats[s] = { type: 'human', uid: ws.user.id, name: ws.user.nick, took: true };
+      d.rev = (d.rev || 0) + 1;
+      d.game.msg = ws.user.nick + ' sentou no lugar de ' + antigo + '.';
+      room.touched = Date.now();
+      broadcast(code, room);
+      reply({});
+      break;
+    }
     case 'emoji': {
       // Reação rápida: só emojis da lista, no máximo uma a cada 1,2 segundo.
       if (!room || !room.subs.has(ws) || !EMOJIS.includes(m.e)) return;

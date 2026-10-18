@@ -655,7 +655,7 @@ function render(){
   // Tamanho da pedra ajustado ao espaço da bandeja: cabem todas numa fila, nem que fiquem menores.
   var wrap=$('handwrap'),n=G.hands[v].length||1,avail=Math.max(120,wrap.clientWidth-24),hAvail=Math.max(40,wrap.clientHeight-18);
   var hw=Math.max(18,Math.min(54,Math.floor((avail-(n-1)*5)/n),Math.floor(hAvail/2))),hh=hw*2;
-  $('hand').innerHTML=G.hands[v].map(function(p,i){
+  $('hand').innerHTML=WATCH?sitPill():G.hands[v].map(function(p,i){
     if(hide)return '<button class="hp back" disabled><i style="width:'+hw+'px;height:'+hh+'px"></i></button>';
     var ok=mv.some(function(m){return m.p===p});
     return '<button class="hp '+(myTurn?(ok?'ok':'no'):'')+'" data-i="'+i+'" '+(ok?'':'disabled')+' aria-label="Peça '+p.a+' e '+p.b+'">'+svgPiece(p.a,p.b,true,hw,hh)+'</button>';
@@ -741,6 +741,7 @@ function renderBoard(){
 function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 
 $('hand').addEventListener('click',function(ev){
+  if(ev.target.closest('#btnSit')){sitFlow();return}
   var b=ev.target.closest('.hp');if(!b||b.disabled||!G||G.handOver)return;
   var v=viewSeat();if(WATCH||G.turn!==v||!CFG.human[v])return;
   var p=G.hands[v][+b.dataset.i];
@@ -777,11 +778,16 @@ function showResult(res){
     +'<div class="hands">'+rows+'</div>'
     +'<p class="small">Placar: '+esc(teamName(0))+' '+G.scores[0]+' · '+esc(teamName(1))+' '+G.scores[1]+' (meta '+TARGET+')</p>'
     +'<div class="btns">'+resBtns(res)+'</div></div>');
+  wireTake();
   if($('again'))$('again').onclick=newGame;
   if($('toSetup'))$('toSetup').onclick=ONLINE?function(){leaveRoom();showSetup()}:showSetup;
   if($('next'))$('next').onclick=newHand;
 }
 function resBtns(res){
+  if(WATCH){
+    var sb=sitButtons();
+    return (sb||'<p class="small">Mesa cheia: não há cadeira de robô para sentar agora.</p>')+'<button class="btn ghost" id="toSetup">Sair da mesa</button>';
+  }
   var host=!ONLINE||IAMHOST;
   if(res.final!==undefined)return (host?'<button class="btn" id="again">Novo jogo</button>':'')+'<button class="btn ghost" id="toSetup">'+(ONLINE?'Sair da sala':'Trocar jogadores')+'</button>';
   return host?'<button class="btn" id="next">Próxima mão</button>':'<p class="small">Aguardando o anfitrião começar a próxima mão.</p>';
@@ -1148,6 +1154,11 @@ function onRoom(snap){
     return;
   }
   if(G&&doc.rev<=REV)return;
+  if(G&&WATCH){
+    // quem assistia acabou de sentar no lugar de um robô: passa a jogar
+    var eu=mySeatIn(doc.seats);
+    if(eu>=0){MYSEAT=eu;WATCH=false;closeLayer();deitar()}
+  }
   if(!G){
     var me=mySeatIn(doc.seats);
     if(me<0&&!WATCH){leaveRoom();showOnline();netMsg('Esse jogo já começou e você não tem lugar nele.');return}
@@ -1223,6 +1234,40 @@ async function joinRoom(code,name){
   MYNAME=name;ROOMREF=ref;ROOM=doc;enterOnline(me,doc.host===UID);REV=0;
   subscribe();
   if(doc.phase==='lobby')renderLobby();
+}
+/* Quem assiste pode sentar no lugar de um robô: na hora, se a cadeira ficou vaga porque alguém saiu; senão, quando a rodada acaba. */
+function takeable(){
+  if(!WATCH||!ROOM||!G||!ROOM.seats)return [];
+  return activeSeats().filter(function(s){var x=ROOM.seats[s];return x&&x.type==='bot'&&(x.left||G.handOver)});
+}
+function sitPill(){
+  var t=takeable();
+  if(t.length)return '<button class="btn" id="btnSit">Sentar na mesa</button>';
+  var temRobo=activeSeats().some(function(s){var x=ROOM&&ROOM.seats&&ROOM.seats[s];return x&&x.type==='bot'});
+  return '<button class="btn ghost" id="btnSit" data-wait="1">'+(temRobo?'Sentar quando acabar a rodada':'Mesa cheia')+'</button>';
+}
+function sitButtons(){
+  return takeable().map(function(s){
+    var par=NP===2?'':(' · '+(team(s)===0?'Dupla A':'Dupla B'));
+    return '<button class="btn" data-take="'+s+'">Sentar no lugar de '+esc(nm(s))+esc(par)+'</button>';
+  }).join('');
+}
+function takeSeat(s){
+  if(!DB||!ROOM)return;
+  DB.raw({t:'take',code:ROOM.code,seat:s}).then(function(){closeLayer()}).catch(function(e){
+    var msg={espere_rodada:'Só dá para sentar quando a rodada acabar.',indisponivel:'Esse lugar não está mais disponível.',ja_sentado:'Você já está sentado nesta mesa.'}[e&&e.code]||'Não consegui sentar agora.';
+    showToast({n:'Mesa',x:msg});
+  });
+}
+function wireTake(){
+  document.querySelectorAll('#layer [data-take]').forEach(function(b){b.onclick=function(){takeSeat(b.dataset.take)}});
+}
+function sitFlow(){
+  var t=takeable();
+  if(!t.length){showToast({n:'Mesa',x:'Você poderá sentar no lugar de um robô quando a rodada acabar.'});return}
+  if(t.length===1){takeSeat(t[0]);return}
+  openLayer('<div class="card"><h2>Sentar na mesa</h2><p>Escolha o lugar de um robô:</p><div class="btns" style="flex-direction:column">'+sitButtons()+'</div><button class="btn ghost" id="sitx">Cancelar</button></div>');
+  wireTake();$('sitx').onclick=closeLayer;
 }
 /* Assistir uma mesa: entra só para ver (as peças dos jogadores ficam escondidas) e pode escrever no chat. */
 async function watchRoom(code){
