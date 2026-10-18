@@ -251,7 +251,8 @@ async function handle(ws, m) {
       const seats = d.mode === '2' ? [0, 2] : [0, 1, 2, 3];
       const open = d.phase === 'lobby' ? seats.filter((s) => d.seats[s] && d.seats[s].type === 'open').length : 0;
       const players = seats.filter((s) => d.seats[s] && d.seats[s].type === 'human').map((s) => d.seats[s].name);
-      const item = { code, mode: d.mode === '2' ? '2' : '4', playing: d.phase === 'play', players, open, touched: r.touched };
+      const robos = seats.filter((s) => d.seats[s] && d.seats[s].type === 'bot').length;
+      const item = { code, mode: d.mode === '2' ? '2' : '4', playing: d.phase === 'play', players, open, robos, touched: r.touched };
       if (item.playing && d.game && Array.isArray(d.game.scores)) item.scores = d.game.scores;
       list.push(item);
     });
@@ -343,7 +344,7 @@ async function handle(ws, m) {
       // Quem assiste senta no lugar de um robô: na hora, se a cadeira foi deixada por alguém que saiu; senão, só entre as rodadas.
       if (!room || !room.doc || !room.subs.has(ws)) return reply({ error: 'invalid_argument' });
       const d = room.doc;
-      if (d.phase !== 'play' || !d.game || d.game.over) return reply({ error: 'indisponivel' });
+      if (d.phase !== 'play' || !d.game) return reply({ error: 'indisponivel' });
       if (Object.values(d.seats || {}).some((x) => x && x.uid === ws.user.id)) return reply({ error: 'ja_sentado' });
       const s = String(m.seat);
       const ativos = d.mode === '2' ? ['0', '2'] : ['0', '1', '2', '3'];

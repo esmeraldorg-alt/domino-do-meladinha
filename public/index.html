@@ -899,7 +899,7 @@ function showSetup(){
       }
     });
     try{localStorage.setItem('domino-cfg',JSON.stringify(CFG))}catch(e){}
-    newGame();
+    comecarPartida();
   };
   $('rl').onclick=function(){showRules();$('rc').onclick=showSetup};
 }
@@ -1264,6 +1264,46 @@ async function createRoom(name){
   try{await ref.set(doc)}catch(e){netMsg('Não consegui criar a sala. Peça ao dono do jogo acesso de colaborador.');return}
   ROOMREF=ref;ROOM=doc;enterOnline(0,true);REV=0;subscribe();renderLobby();
 }
+/* "Começar" com uma só pessoa e robôs: a partida vira uma mesa de verdade no servidor, que aparece em "Mesas abertas".
+   Outras pessoas podem assistir e sentar no lugar de um robô quando a rodada acabar. Sem conexão a tempo, cai na partida local. */
+async function abrirMesaComRobos(name,cancelado){
+  if(!(await ensureNet()))return false;
+  var code,ref,tries=0;
+  do{code=genCode();ref=DB.doc('rooms/'+code);var sn=await ref.get();if(!sn.exists)break}while(++tries<5);
+  if(cancelado())return false;
+  var duo=LOCALNP===2,usados=[];
+  function robo(){var n=pickBot(usados);usados.push(n);return n}
+  var doc={rev:0,phase:'lobby',host:UID,code:code,game:null,mode:duo?'2':'4',seats:{
+    '0':{type:'human',uid:UID,name:name},'1':{type:'bot',uid:null,name:robo()},
+    '2':{type:'bot',uid:null,name:robo()},'3':{type:'bot',uid:null,name:robo()}}};
+  await ref.set(doc);
+  if(cancelado()){try{ref.delete()}catch(e){}return false}
+  ROOMREF=ref;ROOM=doc;enterOnline(0,true);REV=0;subscribe();
+  NP=duo?2:4;
+  setupFromSeats(ROOM.seats);MYSEAT=0;ROOM.phase='play';shownHand=-1;closeLayer();
+  newGame();
+  return true;
+}
+async function comecarPartida(){
+  var humanos=activeSeats().filter(function(s){return CFG.human[s]}).length;
+  var online=!viaClaude()&&/^https?:$/.test(location.protocol)&&humanos===1;
+  if(!online){newGame();return}
+  openLayer('<div class="card"><h2>Abrindo a mesa...</h2><p class="small">Conectando ao servidor para a sua mesa aparecer para os outros jogadores.</p></div>');
+  var cancel=false,timer=setTimeout(function(){cancel=true;closeLayer();newGame()},8000);   // servidor dormindo: joga sozinho e segue
+  try{
+    if(!ME&&!(await autoLogin())){
+      var g=getGuest();
+      await entrarConvidado(g?g.nick:'Visitante'+Math.floor(1000+Math.random()*9000));
+    }
+    if(cancel)return;
+    var ok=await abrirMesaComRobos(ME.nick,function(){return cancel});
+    clearTimeout(timer);
+    if(!ok&&!cancel){closeLayer();newGame()}
+  }catch(e){
+    clearTimeout(timer);
+    if(!cancel){closeLayer();newGame()}
+  }
+}
 async function joinRoom(code,name){
   if(!(await ensureNet())){netMsg('O jogo online só funciona logado no claude.ai, abrindo o link do jogo.');return}
   code=code.toUpperCase().replace(/[^A-Z]/g,'');
@@ -1396,7 +1436,7 @@ function startTables(){
       var el=$('mesas');if(!el){stopTables();return}
       var list=r.list||[];
       el.innerHTML=list.length?list.map(function(m){
-        var info=m.playing?'em jogo'+(m.scores?' · '+m.scores[0]+' x '+m.scores[1]:''):(m.open?m.open+(m.open===1?' vaga':' vagas'):'mesa cheia');
+        var info=m.playing?'em jogo'+(m.scores?' · '+m.scores[0]+' x '+m.scores[1]:'')+(m.robos?' · '+m.robos+(m.robos===1?' robô':' robôs')+' (dá para sentar quando a rodada acabar)':''):(m.open?m.open+(m.open===1?' vaga':' vagas'):'mesa cheia');
         return '<div class="mesa"><div class="mi"><strong>'+esc(m.code)+'</strong> · '+(m.mode==='2'?'1 contra 1':'Duplas')
           +'<small>'+esc(m.players.join(', ')||'ninguém ainda')+' · '+info+'</small></div>'
           +'<div class="mb">'+(m.open?'<button class="btn" data-join="'+esc(m.code)+'">Entrar</button>':'')
