@@ -1,0 +1,58 @@
+name: Gerar APK
+
+# Compila o app Android do Dominó do Meladinha na nuvem do GitHub e publica o APK numa "release".
+# Link fixo para baixar sempre a versão mais nova:
+#   https://github.com/esmeraldorg-alt/domino-do-meladinha/releases/latest/download/DominoDoMeladinha.apk
+# O app só abre o jogo do servidor, então mudanças no jogo chegam sem precisar de um APK novo.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - '.github/workflows/apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Chave de assinatura (criada uma vez e guardada no repositório)
+        run: |
+          if [ ! -f android/debug.keystore ]; then
+            keytool -genkeypair -keystore android/debug.keystore -storepass android -keypass android \
+              -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+            git config user.name "github-actions"
+            git config user.email "actions@users.noreply.github.com"
+            git add android/debug.keystore
+            git commit -m "Chave de assinatura do APK"
+            git push
+          fi
+
+      - name: Compilar
+        working-directory: android
+        run: gradle --no-daemon assembleRelease
+
+      - name: Publicar o APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk DominoDoMeladinha.apk
+          gh release create "apk-${{ github.run_number }}" DominoDoMeladinha.apk \
+            --title "App Android ${{ github.run_number }}" \
+            --notes "APK do Dominó do Meladinha. Para instalar, permita instalar apps desconhecidos para o navegador ou gerenciador de arquivos." \
+            --latest

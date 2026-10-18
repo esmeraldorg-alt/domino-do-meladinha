@@ -1,0 +1,40 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'br.com.meladinha.domino'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'br.com.meladinha.domino'
+        minSdk 26
+        targetSdk 34
+        // Cada compilação no GitHub ganha um número maior, para o Android aceitar a atualização por cima.
+        versionCode (System.getenv('GITHUB_RUN_NUMBER') ?: '1').toInteger()
+        versionName '1.0'
+    }
+
+    // Assinatura com a chave de depuração padrão do Android, guardada no repositório (android/debug.keystore).
+    // Serve para instalar fora da Play Store e manter a mesma assinatura entre versões.
+    signingConfigs {
+        release {
+            storeFile file('../debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
