@@ -626,30 +626,85 @@ function caoInteracao(){
     {t:'Fechar',fn:fechar,fraco:true}]);
 }
 /* esposa */
-var esp={x:3.5,y:4.5,tx:3.5,ty:4.5,pausa:1,vis:false,mov:false,ang:0};
+var esp={x:3.5,y:4.5,tx:3.5,ty:4.5,pausa:1,vis:false,mov:false,ang:0,tar:null,atual:null,cam:null,trab:0,acao:null,res:{r:0,p:0}};
 var FRASES_E=['Cuida da terra com calma, que ela cuida de nós.','Não esquece de dormir direito: o corpo cobra depois.','O cachorro anda sapeca. Se ele for na horta, ralha na hora!','A Dona Cida anda procurando cristal. Quem sabe você acha um na gruta.','Dormiu pouco? Tira uma soneca na rede.','Faz uma cerca bonita em volta da horta, que o cachorro respeita.'];
+function caminho(sx,sy,gx,gy){
+  if(sx===gx&&sy===gy)return [];
+  var ant={},fila=[{x:sx,y:sy}],ds=[[1,0],[-1,0],[0,1],[0,-1]],i;
+  ant[sx+','+sy]=null;
+  while(fila.length){
+    var c=fila.shift();
+    for(i=0;i<4;i++){
+      var nx=c.x+ds[i][0],ny=c.y+ds[i][1],k=nx+','+ny;
+      if(ant[k]!==undefined||!anda(nx,ny))continue;
+      ant[k]=c;
+      if(nx===gx&&ny===gy){var p=[],q={x:nx,y:ny};while(q&&!(q.x===sx&&q.y===sy)){p.unshift({x:q.x,y:q.y});q=ant[q.x+','+q.y]}return p}
+      fila.push({x:nx,y:ny});
+    }
+  }
+  return null;
+}
+function aplicaTar(t){
+  var pl=S.plots[t.i];
+  if(t.acao==='regar'&&pl.c&&!pl.m){pl.m=true;esp.res.r++}
+  else if(t.acao==='preparar'&&pl.e==='grama'){pl.e='terra';esp.res.p++}
+}
+function terminaTarefa(silencio){
+  var r=esp.res,tx=[];
+  if(r.r)tx.push('regou '+r.r+(r.r===1?' canteiro':' canteiros'));
+  if(r.p)tx.push('preparou '+r.p+(r.p===1?' canteiro':' canteiros'));
+  esp.tar=null;esp.atual=null;esp.cam=null;esp.acao=null;esp.trab=0;
+  esp.tx=3.5;esp.ty=4.5;esp.pausa=2;
+  if(!silencio)toast(S.nomes.esposa+' terminou na horta: '+(tx.length?tx.join(' e '):'nada a fazer')+'.');
+}
 function atualizaEsp(dt){
   esp.vis=S.camada==='sup'&&S.hora<780;
-  if(!esp.vis){esp.mov=false;return}
-  var dx=esp.tx-esp.x,dy=esp.ty-esp.y,d=Math.hypot(dx,dy);
-  if(d>.04){var st=Math.min(d,1.3*dt);esp.x+=dx/d*st;esp.y+=dy/d*st;esp.ang=Math.atan2(dx,dy);esp.mov=true;return}
+  if(!esp.vis){
+    esp.mov=false;
+    if(esp.tar){if(esp.atual)aplicaTar(esp.atual);while(esp.tar.length)aplicaTar(esp.tar.shift());terminaTarefa(true)}
+    return;
+  }
+  if(esp.tar){
+    if(esp.trab>0){esp.mov=false;esp.trab-=dt;if(esp.trab<=0){aplicaTar(esp.atual);esp.atual=null;esp.acao=null}return}
+    if(!esp.atual){
+      if(!esp.tar.length){terminaTarefa();return}
+      esp.atual=esp.tar.shift();
+      var xy=idxXY(esp.atual.i);
+      esp.cam=caminho(Math.floor(esp.x),Math.floor(esp.y),xy.x,xy.y);
+      if(!esp.cam){esp.atual=null;return}
+    }
+    var w=esp.cam[0];
+    if(w){
+      var tx=w.x+.5,ty=w.y+.5,dx=tx-esp.x,dy=ty-esp.y,d=Math.hypot(dx,dy),st=2.4*dt;
+      if(d<=st){esp.x=tx;esp.y=ty;esp.cam.shift()}else{esp.x+=dx/d*st;esp.y+=dy/d*st}
+      if(d>.001)esp.ang=Math.atan2(dx,dy);
+      esp.mov=true;return;
+    }
+    esp.mov=false;esp.acao=esp.atual.acao;esp.trab=1.2;return;
+  }
+  var dx2=esp.tx-esp.x,dy2=esp.ty-esp.y,d2=Math.hypot(dx2,dy2);
+  if(d2>.04){var st2=Math.min(d2,1.3*dt);esp.x+=dx2/d2*st2;esp.y+=dy2/d2*st2;esp.ang=Math.atan2(dx2,dy2);esp.mov=true;return}
   esp.mov=false;esp.pausa-=dt;if(esp.pausa>0)return;
   var ds=[[1,0],[-1,0],[0,1],[0,-1]],op=[],ex=Math.floor(esp.x),ey=Math.floor(esp.y),px=Math.floor(S.p.x),py=Math.floor(S.p.y);
   ds.forEach(function(q){var nx=ex+q[0],ny=ey+q[1];if(nx>=1&&nx<=9&&ny>=4&&ny<=5&&anda(nx,ny)&&plotIdx(nx,ny)<0&&!(nx===px&&ny===py))op.push(q)});
   if(op.length){var q=op[Math.floor(Math.random()*op.length)];esp.tx=ex+q[0]+.5;esp.ty=ey+q[1]+.5}
   esp.pausa=1.5+Math.random()*3.5;
 }
+function pedirAjuda(){
+  var e=S.esp,tar=[],n=0;
+  if(esp.tar){toast(S.nomes.esposa+' já está cuidando da horta.');return}
+  S.plots.forEach(function(p,i){if(p.c&&!p.m)tar.push({i:i,acao:'regar'})});
+  if(!tar.length)S.plots.forEach(function(p,i){if(p.e==='grama'&&n<6){n++;tar.push({i:i,acao:'preparar'})}});
+  if(!tar.length){toast('Não há nada para ela fazer: as plantas já estão molhadas e todos os canteiros já estão preparados.');return}
+  e.ajudaDia=S.dia;esp.tar=tar;esp.atual=null;esp.cam=null;esp.res={r:0,p:0};esp.trab=0;
+  toast(S.nomes.esposa+' foi cuidar da horta ('+(tar[0].acao==='regar'?'regar':'preparar a terra')+').');
+}
 function esposaJanela(){
   var e=S.esp,c1=e.cafeDia===S.dia,a1=e.ajudaDia===S.dia;
-  var h='<p>'+esc(S.nomes.esposa)+' sorri para você.</p><p class="mudo">“'+FRASES_E[Math.floor(Math.random()*FRASES_E.length)]+'”</p>';
+  var h='<p>'+esc(S.nomes.esposa)+' sorri para você.</p><p class="mudo">“'+FRASES_E[Math.floor(Math.random()*FRASES_E.length)]+'”</p><p class="mudo">Na horta ela rega as plantas secas. Se já estiverem todas molhadas, ela prepara a terra dos canteiros vazios.</p>';
   abrir(esc(S.nomes.esposa),h,[
     {t:c1?'Café já tomado hoje':'Pedir um café (+30 de fôlego)',off:c1,fn:function(){e.cafeDia=S.dia;S.folego=Math.min(100,S.folego+30);fechar();toast(S.nomes.esposa+' trouxe um café quentinho. +30 de fôlego.');hud()}},
-    {t:a1?'Ajuda já pedida hoje':'Pedir ajuda na horta',off:a1,fn:function(){
-      var n=0;S.plots.forEach(function(p){if(p.c&&!p.m){p.m=true;n++}});
-      fechar();
-      if(!n){toast('Não há o que regar agora.');return}
-      e.ajudaDia=S.dia;toast(S.nomes.esposa+' regou '+n+(n===1?' canteiro.':' canteiros.'));
-    }},
+    {t:a1?'Ajuda já pedida hoje':'Pedir ajuda na horta',off:a1,fn:function(){fechar();pedirAjuda()}},
     {t:'Fechar',fn:fechar,fraco:true}]);
 }function valorItem(k){
   var p=k.split(':');
@@ -1110,6 +1165,10 @@ var espG=new THREE.Group();sc.add(espG);
   add(espG,CYL(.2,.3,.7,10),M(0xe8c24a),0,.45,0);add(espG,BOX(.22,.4,.05),M(0xfffaf0),0,.45,.22);
   add(espG,SPH(.2,10),M(0xe4ad84),0,1,0);add(espG,SPH(.21,10),M(0x5a3a22),0,1.07,-.05);add(espG,SPH(.1,7),M(0x5a3a22),0,1.27,-.06);
   add(espG,SPH(.03,5),M(0x2a1a08),-.07,1,.18,false);add(espG,SPH(.03,5),M(0x2a1a08),.07,1,.18,false);
+  var can=add(espG,BOX(.16,.12,.12),M(0x9aa3ad),.26,.55,.32,false),hoe=add(espG,CYL(.015,.015,.8,5),M(0x7a4f2a),.26,.5,.35,false),gotas=[];
+  can.visible=false;hoe.visible=false;hoe.rotation.x=.6;
+  for(var gi=0;gi<4;gi++){var gt=add(espG,SPH(.04,5),new THREE.MeshBasicMaterial({color:0x8fd0ff}),.26,.4,.5,false);gt.visible=false;gotas.push(gt)}
+  espG.userData={can:can,hoe:hoe,gotas:gotas};
   espG.visible=false;
 })();
 var dogG=new THREE.Group();sc.add(dogG);
@@ -1205,7 +1264,7 @@ function render(t){
   pose(t,lg);
   etiq(nmCao,dogG.position.x,cao.est==='dorme'?.75:1.05,dogG.position.z,(cao.est==='dorme'?'zZz ':'')+S.nomes.cao,dogG.visible);
   espG.visible=!!esp.vis&&sup;
-  if(espG.visible){espG.position.set(esp.x-W/2,esp.mov?Math.abs(Math.sin(t*8))*.04:0,esp.y-H/2);espG.rotation.y=esp.ang}
+  if(espG.visible){espG.position.set(esp.x-W/2,esp.mov?Math.abs(Math.sin(t*8))*.04:0,esp.y-H/2);espG.rotation.order='YXZ';espG.rotation.y=esp.ang;var eu2=espG.userData,tr=!!esp.acao&&esp.trab>0;espG.rotation.x=tr?.4:0;eu2.can.visible=tr&&esp.acao==='regar';eu2.hoe.visible=tr&&esp.acao==='preparar';eu2.gotas.forEach(function(g,i){g.visible=eu2.can.visible;if(g.visible){var q=(t*1.6+i/4)%1;g.position.set(.26,.45-q*.4,.5+q*.12)}})}
   etiq(nmEsp,espG.position.x,1.6,espG.position.z,S.nomes.esposa,espG.visible);
   etiq(nmEu,wx,S.dorme?(S.dorme.tipo==='cama'?1.3:(S.dorme.tipo==='chao'?.8:1.3)):1.7+bob,wz,(S.dorme?'zZz ':'')+S.nomes.eu,true);
   etiq(nmCida,cida3.position.x,1.6,cida3.position.z,S.nomes.cida,sup);
