@@ -403,14 +403,16 @@ function iniciarSono(tipo,h,encerra){
   hud();infoAlvo();
 }
 function cair(){
-  if(S.dorme||anim)return;
+  if(S.dorme||anim||(rota&&rota.alvo.dormir))return;
   var noite=S.hora>=MIN_DIA;
-  rota=null;fechar();
+  fechar();S.colocando=null;
+  if(S.camada!=='sup')subir();
+  rota=null;irPara(2,3);
+  if(rota){rota.alvo.dormir=noite?'noite':'cansaco';toast(noite?'Já é hora de dormir: você vai para a rede.':'Você está exausto e vai descansar na rede.');return}
   S.dorme={tipo:'chao',ef:.7,h:0,alvo:noite?Math.max(1,(8-S.sonoHoje)/.7):4,fim:noite,ox:S.p.x,oy:S.p.y};
   $('acorda').hidden=true;
-  toast('Você caiu de sono!');
-}
-function dormir(dt){
+  toast('Não deu para chegar em casa: você caiu de sono.');
+}function dormir(dt){
   var d=S.dorme,dh=dt*8/60;
   if(d.h+dh>=d.alvo)dh=d.alvo-d.h;
   d.h+=dh;S.hora+=dh*60;
@@ -457,7 +459,7 @@ function construir(){
   if(S.camada!=='sup'){toast('Suba à superfície para construir.');return}
   var h='<p>Madeira: <b>'+S.madeira+' toras</b>. Corte árvores com o Machado (tecla 7).</p><div class="lista">';
   Object.keys(OBRAS).forEach(function(k){var o=OBRAS[k];h+='<div class="linha"><span>'+o.nome+'<small>'+esc(o.desc)+'</small></span><button class="b peq" data-ob="'+k+'"'+(S.madeira<o.custo?' disabled':'')+'>'+o.custo+' toras</button></div>'});
-  h+='</div><p class="mudo">Depois de escolher, toque num quadrado livre de grama para construir.</p>';
+  h+='</div><p class="mudo">Depois de escolher, toque num quadrado livre de grama para construir. Botão direito do mouse (ou segurar o dedo) numa construção desmonta e devolve a madeira.</p>';
   abrir('Construir',h,[{t:'Fechar',fn:fechar}]);
   $('modal').onclick=function(ev){var b=ev.target.closest('button[data-ob]');if(!b)return;S.colocando=b.dataset.ob;cercaIni=null;fechar();toast(S.colocando==='cerca'?'Escolha o modo da cerca na barra de cima.':'Toque num quadrado de grama.');barra();infoAlvo()};
 }
@@ -1027,20 +1029,20 @@ function obras3(){
   var k=S.obras.map(function(o){return o.t+o.x+','+o.y+(o.d||'')}).join('|');
   if(k===obKey)return;obKey=k;limpa(gOb);
   S.obras.forEach(function(o){
-    var w=W3(o.x,o.y),wd=M(0x8a5a32);
+    var w=W3(o.x,o.y),wd=M(0x8a5a32),og=new THREE.Group();og.userData.ob={x:o.x,y:o.y};gOb.add(og);
     if(o.t==='cerca'){
-      add(gOb,BOX(.13,.75,.13),wd,w.x,.37,w.z);
+      add(og,BOX(.13,.75,.13),wd,w.x,.37,w.z);
       var dr=obraEm(o.x+1,o.y)==='cerca',dl=obraEm(o.x-1,o.y)==='cerca',dd=obraEm(o.x,o.y+1)==='cerca',du=obraEm(o.x,o.y-1)==='cerca';
-      if(dr){add(gOb,BOX(1,.07,.07),wd,w.x+.5,.6,w.z);add(gOb,BOX(1,.07,.07),wd,w.x+.5,.32,w.z)}
-      if(dd){add(gOb,BOX(.07,.07,1),wd,w.x,.6,w.z+.5);add(gOb,BOX(.07,.07,1),wd,w.x,.32,w.z+.5)}
-      if(!dr&&!dl&&!dd&&!du){if(o.d==='v'){add(gOb,BOX(.07,.07,.9),wd,w.x,.6,w.z);add(gOb,BOX(.07,.07,.9),wd,w.x,.32,w.z)}else{add(gOb,BOX(.9,.07,.07),wd,w.x,.6,w.z);add(gOb,BOX(.9,.07,.07),wd,w.x,.32,w.z)}}
+      if(dr){add(og,BOX(1,.07,.07),wd,w.x+.5,.6,w.z);add(og,BOX(1,.07,.07),wd,w.x+.5,.32,w.z)}
+      if(dd){add(og,BOX(.07,.07,1),wd,w.x,.6,w.z+.5);add(og,BOX(.07,.07,1),wd,w.x,.32,w.z+.5)}
+      if(!dr&&!dl&&!dd&&!du){if(o.d==='v'){add(og,BOX(.07,.07,.9),wd,w.x,.6,w.z);add(og,BOX(.07,.07,.9),wd,w.x,.32,w.z)}else{add(og,BOX(.9,.07,.07),wd,w.x,.6,w.z);add(og,BOX(.9,.07,.07),wd,w.x,.32,w.z)}}
     }else if(o.t==='banco'){
-      add(gOb,BOX(.9,.08,.4),M(0xb98a52),w.x,.42,w.z);add(gOb,BOX(.9,.3,.06),M(0xb98a52),w.x,.66,w.z-.18);
-      add(gOb,BOX(.08,.4,.35),wd,w.x-.36,.2,w.z);add(gOb,BOX(.08,.4,.35),wd,w.x+.36,.2,w.z);
+      add(og,BOX(.9,.08,.4),M(0xb98a52),w.x,.42,w.z);add(og,BOX(.9,.3,.06),M(0xb98a52),w.x,.66,w.z-.18);
+      add(og,BOX(.08,.4,.35),wd,w.x-.36,.2,w.z);add(og,BOX(.08,.4,.35),wd,w.x+.36,.2,w.z);
     }else{
-      add(gOb,BOX(.9,.7,.9),M(0xb98a52),w.x,.35,w.z);
-      var rf=add(gOb,CON(.75,.5,4),M(0xa8452e),w.x,.95,w.z);rf.rotation.y=Math.PI/4;
-      add(gOb,BOX(.3,.5,.05),M(0x6e4426),w.x,.28,w.z+.46);
+      add(og,BOX(.9,.7,.9),M(0xb98a52),w.x,.35,w.z);
+      var rf=add(og,CON(.75,.5,4),M(0xa8452e),w.x,.95,w.z);rf.rotation.y=Math.PI/4;
+      add(og,BOX(.3,.5,.05),M(0x6e4426),w.x,.28,w.z+.46);
     }
   });
 }
@@ -1217,7 +1219,7 @@ function frameLoop(ts){
   var dt=Math.min(0.05,(ts-ult)/1000||0.016);ult=ts;tAcc+=dt;if(!pausa){atualizaCao(dt);atualizaEsp(dt)}
   if(!pausa){
     var e=lerTeclas(),ix=e.dx||in_.dx,iy=e.dy||in_.dy,m=Math.hypot(ix,iy);
-    mov=m>0;if(S.dorme){mov=false;ix=0;iy=0;m=0;rota=null;dormir(dt)}else if(anim){mov=false;ix=0;iy=0;m=0;rota=null;animaTick(dt)}else if(m>0)rota=null;else if(rota)mov=seguirRota(dt);
+    mov=m>0;if(S.dorme){mov=false;ix=0;iy=0;m=0;rota=null;dormir(dt)}else if(anim){mov=false;ix=0;iy=0;m=0;rota=null;animaTick(dt)}else if(rota&&rota.alvo.dormir){m=0;ix=0;iy=0;mov=seguirRota(dt)}else if(m>0)rota=null;else if(rota)mov=seguirRota(dt);
     if(m>0){
       if(m>1){ix/=m;iy/=m}
       if(Math.abs(ix)>Math.abs(iy)){S.p.fx=Math.sign(ix);S.p.fy=0}else{S.p.fx=0;S.p.fy=Math.sign(iy)}
@@ -1244,6 +1246,7 @@ function seguirRota(dt){
   if(!w){
     var a=r.alvo,px=Math.floor(S.p.x),py=Math.floor(S.p.y);
     S.p.x=px+.5;S.p.y=py+.5;
+    if(a.dormir){rota=null;iniciarSono('cama',a.dormir==='noite'?null:4,a.dormir==='noite');return false}
     if(a.agir){S.p.fx=Math.sign(a.x-px);S.p.fy=Math.sign(a.y-py);if(S.p.fx&&S.p.fy)S.p.fy=0;if(a.esp&&esp.vis&&Math.hypot(esp.x-S.p.x,esp.y-S.p.y)<2.4)esposaJanela();else if(a.cao&&cao.vis&&Math.hypot(cao.x-S.p.x,cao.y-S.p.y)<2.4)caoInteracao();else usar()}
     rota=null;return false;
   }
@@ -1286,7 +1289,23 @@ cv.addEventListener('click',function(e){
   var hs=raio.intersectObjects((S.camada==='sup'?gSup:gGru).children,true),h=null,i;
   for(i=0;i<hs.length;i++){var m=hs[i].object.material;if(m&&m.type==='MeshBasicMaterial')continue;h=hs[i];break}
   var dg=false,eg=false,o2=h&&h.object;while(o2){if(o2===dogG){dg=true;break}if(o2===espG){eg=true;break}o2=o2.parent}if(eg&&esp.vis){irPara(Math.floor(esp.x),Math.floor(esp.y));return}if(dg&&cao.vis){irPara(Math.floor(cao.x),Math.floor(cao.y));return}if(h){var d=raio.ray.direction;irPara(Math.floor(h.point.x+d.x*.12+W/2),Math.floor(h.point.z+d.z*.12+H/2))}
-});function ajustar(){
+});function destruir(e){
+  e.preventDefault();
+  if(pausa||S.dorme||anim||S.camada!=='sup')return;
+  var b=cv.getBoundingClientRect();
+  raio.setFromCamera({x:(e.clientX-b.left)/b.width*2-1,y:-((e.clientY-b.top)/b.height)*2+1},cam);
+  var hs=raio.intersectObjects(gOb.children,true);
+  if(!hs.length)return;
+  var o=hs[0].object,ob=null;
+  while(o){if(o.userData&&o.userData.ob){ob=o.userData.ob;break}o=o.parent}
+  if(!ob)return;
+  var i;for(i=0;i<S.obras.length;i++)if(S.obras[i].x===ob.x&&S.obras[i].y===ob.y)break;
+  if(i>=S.obras.length)return;
+  var d=S.obras.splice(i,1)[0],c=OBRAS[d.t];
+  S.madeira+=c.custo;toast('Desmontou: '+c.nome+'. Voltaram '+c.custo+' toras para o inventário.');hud();barra();guardar();
+}
+cv.addEventListener('contextmenu',destruir);
+function ajustar(){
   var pal=$('palco'),w=pal.clientWidth,h=pal.clientHeight;
   ren.setSize(Math.max(100,w),Math.max(100,h),false);cam.aspect=Math.max(100,w)/Math.max(100,h);cam.updateProjectionMatrix();
 }
