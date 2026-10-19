@@ -22,6 +22,10 @@ const ARQUIVOS = {
   '/icon-192.png': ['icon-192.png', 'image/png'],
   '/icon-512.png': ['icon-512.png', 'image/png'],
   '/sw.js': ['sw.js', 'application/javascript; charset=utf-8'],
+  '/fazenda.webmanifest': ['fazenda.webmanifest', 'application/manifest+json'],
+  '/farm-180.png': ['farm-180.png', 'image/png'],
+  '/farm-192.png': ['farm-192.png', 'image/png'],
+  '/farm-512.png': ['farm-512.png', 'image/png'],
 };
 
 const server = http.createServer((req, res) => {
@@ -41,6 +45,11 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, { 'content-type': estatico[1], 'cache-control': url === '/sw.js' ? 'no-cache' : 'public, max-age=86400' });
       res.end(fs.readFileSync(path.join(__dirname, 'public', estatico[0])));
     } catch { res.writeHead(404); res.end('not found'); }
+    return;
+  }
+  if (url === '/fazenda' || url === '/fazenda/') {
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache' });
+    res.end(fs.readFileSync(path.join(__dirname, 'public', 'fazenda.html')));
     return;
   }
   if (url === '/' || url === '/index.html') {
